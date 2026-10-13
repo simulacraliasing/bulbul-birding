@@ -1,7 +1,6 @@
 use bulbul_birding::{
     Result, ToolError,
     client::{BulbulClient, find_tool, list_tools},
-    mcp,
 };
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
@@ -15,7 +14,7 @@ use std::{
 #[command(
     name = "bulbul",
     version,
-    about = "Bulbul 观鸟工具：浏览器登录、查询、清单和 MCP"
+    about = "Bulbul 观鸟工具：浏览器登录、查询、清单和练习"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -52,38 +51,26 @@ enum Commands {
         #[arg(long)]
         confirm: bool,
     },
-    /// 启动 stdio MCP 服务，stdout 仅传输协议消息
-    Mcp,
 }
 
-async fn run(cli: Cli) -> Result<Option<Value>> {
+async fn run(cli: Cli) -> Result<Value> {
     match cli.command {
-        Commands::List { tool } => Ok(Some(list_tools(tool.as_deref())?)),
+        Commands::List { tool } => list_tools(tool.as_deref()),
         Commands::Login {
             api_url,
             no_browser,
-        } => Ok(Some(
-            BulbulClient::from_environment(api_url.as_deref())?
-                .account
-                .login(!no_browser)
-                .await?,
-        )),
-        Commands::Status => Ok(Some(
-            BulbulClient::from_environment(None)?
-                .account
-                .status()
-                .await?,
-        )),
-        Commands::Logout => Ok(Some(
-            BulbulClient::from_environment(None)?
-                .account
-                .logout()
-                .await?,
-        )),
-        Commands::Mcp => {
-            mcp::run(BulbulClient::from_environment(None)?).await?;
-            Ok(None)
-        }
+        } => Ok(BulbulClient::from_environment(api_url.as_deref())?
+            .account
+            .login(!no_browser)
+            .await?),
+        Commands::Status => Ok(BulbulClient::from_environment(None)?
+            .account
+            .status()
+            .await?),
+        Commands::Logout => Ok(BulbulClient::from_environment(None)?
+            .account
+            .logout()
+            .await?),
         Commands::Call {
             tool,
             arguments,
@@ -106,11 +93,9 @@ async fn run(cli: Cli) -> Result<Option<Value>> {
                 }
                 map.insert("confirm".into(), json!(true));
             }
-            Ok(Some(
-                BulbulClient::from_environment(None)?
-                    .call(&tool, arguments)
-                    .await?,
-            ))
+            Ok(BulbulClient::from_environment(None)?
+                .call(&tool, arguments)
+                .await?)
         }
     }
 }
@@ -138,11 +123,10 @@ async fn main() -> ExitCode {
     };
     tokio::select! {
         result = run(cli) => match result {
-            Ok(Some(value)) => {
+            Ok(value) => {
                 if writeln!(io::stdout().lock(), "{value}").is_err() { return ExitCode::from(1); }
                 ExitCode::SUCCESS
             }
-            Ok(None) => ExitCode::SUCCESS,
             Err(error) => { eprintln!("{}", json!({"error":error.to_string()})); ExitCode::from(1) }
         },
         _ = tokio::signal::ctrl_c() => { eprintln!("{}", json!({"status":"cancelled", "message":"已取消登录或操作。"})); ExitCode::from(130) }

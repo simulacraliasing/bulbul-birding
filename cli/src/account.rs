@@ -189,7 +189,7 @@ pub async fn http_json(
     match response.status() {
         StatusCode::UNAUTHORIZED => {
             return Err(ToolError::new(
-                "Bulbul 登录已过期，请重新运行 login 或使用 bulbul_login 登录。",
+                "Bulbul 登录已过期，请重新运行 bulbul login 登录。",
             ));
         }
         StatusCode::TOO_MANY_REQUESTS => return Err(ToolError::new("请求较频繁，请稍后重试。")),
@@ -344,7 +344,7 @@ impl Account {
         let mut guard = self.attempt.lock().await;
         let attempt = guard
             .as_mut()
-            .ok_or_else(|| ToolError::new("请先运行 login 或调用 bulbul_login，开始一次登录。"))?;
+            .ok_or_else(|| ToolError::new("请先运行 bulbul login，开始一次登录。"))?;
         if Instant::now() >= attempt.deadline {
             *guard = None;
             return Err(ToolError::new("本次授权已过期，请重新登录。"));
@@ -424,9 +424,7 @@ impl Account {
 
     pub async fn status(&self) -> Result<Value> {
         let Some(token) = self.token()? else {
-            return Ok(
-                json!({"status":"signed_out", "message":"请运行 login 或使用 bulbul_login 登录。"}),
-            );
+            return Ok(json!({"status":"signed_out", "message":"请运行 bulbul login 登录。"}));
         };
         let result = self
             .request(Method::GET, "/auth/me", None, Some(&token))
@@ -460,7 +458,7 @@ async fn launch_browser(uri: &str) -> bool {
     let mut command = Command::new("open");
     #[cfg(target_os = "linux")]
     let mut command = Command::new("xdg-open");
-    // Launch directly, never through a shell, and protect MCP's stdout.
+    // Launch directly, never through a shell, and keep CLI stdout clean.
     command
         .arg(uri)
         .stdin(Stdio::null())

@@ -57,40 +57,15 @@ bulbul call species_catalog --arguments-file /absolute/path/arguments.json
 
 参数文件是 UTF-8 JSON object，例如 `{ "q": "白头鹎", "limit": 5 }`。使用参数文件可以避免各个 shell 的 JSON 引号差异。写入工具默认返回预览，沿用用户已有授权后加 `--confirm` 执行；失败的写入不会自动重试。
 
-登录令牌保存在 Windows 凭据管理器、macOS 钥匙串或 Linux Secret Service 中。KWallet 需要提供 Secret Service 接口；Linux 没有该服务时需先启用。CLI 和 MCP 共用登录，已运行的 MCP 也能使用刚完成的登录。`logout` 撤销工具自己的会话，网页仍保持登录；会话过期后重新 `login`。
+登录令牌保存在 Windows 凭据管理器、macOS 钥匙串或 Linux Secret Service 中。KWallet 需要提供 Secret Service 接口；Linux 没有该服务时需先启用。后续 CLI 调用自动读取保存的登录。`logout` 撤销工具自己的会话，网页仍保持登录；会话过期后重新 `login`。
 
-## Skill 和 MCP
+## 在 AI 工具中使用
 
-安装 skill 后，Codex 可通过 `$bulbul-birding` 使用，pi 可通过 `/skill:bulbul-birding` 加载；Claude Code 可根据请求自动使用。仅使用 skill 时，上面的启动命令即可完成所有查询。
+安装 skill 后，Codex 可通过 `$bulbul-birding` 使用，pi 可通过 `/skill:bulbul-birding` 加载；Claude Code 可根据请求自动使用。Agent 按 `SKILL.md` 的说明调用 CLI，查询鸟种、地点、清单和练习数据。
 
-需要 MCP 时，先完成一次 `--version` 检查，再登记启动脚本。这样下载不会占用首次 MCP 连接的等待时间。下面所有路径都替换为实际 skill 目录。
+## 从旧的 MCP 接入迁移
 
-Codex 在 `config.toml` 中合并配置，不覆盖已有内容：
-
-```toml
-[mcp_servers.bulbul-birding]
-command = "bash"
-args = ["/absolute/path/bulbul-birding/scripts/bulbul.sh", "mcp"]
-tool_timeout_sec = 120
-```
-
-Windows 的 `command` 使用 `powershell.exe`，`args` 使用 `["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:/skills/bulbul-birding/scripts/bulbul.ps1", "mcp"]`。
-
-Claude Code：
-
-```bash
-claude mcp add --transport stdio bulbul-birding -- bash /absolute/path/bulbul-birding/scripts/bulbul.sh mcp
-```
-
-Windows：
-
-```powershell
-claude mcp add --transport stdio bulbul-birding -- powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/skills/bulbul-birding/scripts/bulbul.ps1 mcp
-```
-
-在 Claude Code 中用 `/mcp` 查看连接状态。pi 使用 skill 中的命令行调用即可；已有 MCP 扩展时，登记同一个启动命令，配置格式以扩展文档为准。
-
-MCP 提供 21 个业务工具，以及 `bulbul_login`、`bulbul_login_complete`、`bulbul_auth_status`、`bulbul_logout`。可以在 harness 中开始浏览器登录，用户确认后再完成；工具结果不显示令牌。
+如果之前配置过 `bulbul-birding` MCP 服务，在当前 AI 工具的设置中移除这一项，保留已安装的 skill。系统凭据库中已有的账号登录可继续用于 CLI。
 
 ## 可选配置
 
@@ -100,9 +75,9 @@ MCP 提供 21 个业务工具，以及 `bulbul_login`、`bulbul_login_complete`�
 | `BULBUL_SESSION_TOKEN` | 使用已有普通用户会话，优先于系统中保存的登录；浏览器登录前先移除。          |
 | `BULBUL_TIANDITU_KEY`  | 天地图地点搜索 key；未配置时仍可用已知坐标查询。                            |
 
-这些变量需要由启动 harness 的进程提供。Codex 如需转发，可增加 `env_vars = ["BULBUL_API_URL", "BULBUL_SESSION_TOKEN", "BULBUL_TIANDITU_KEY"]`。普通用户无需这项设置；不要把令牌写进共享配置、参数、聊天或 Git。
+这些变量需要由运行 CLI 的进程提供。Agent 调用 CLI 时会使用终端的环境变量，普通用户无需配置账号变量；不要把令牌写进共享配置、参数、聊天或 Git。
 
-工具沿用普通用户权限和额度，不需要 `agent_preview` 角色、后端 LLM key 或数据库连接，目前没有额外的 MCP scope。
+工具沿用普通用户权限和额度，不需要 `agent_preview` 角色、后端 LLM key 或数据库连接。
 
 ## 从源码构建
 
@@ -115,4 +90,4 @@ cargo build --release --locked
 
 将 `target/release/bulbul` 或 `bulbul.exe` 放进 skill 的 `bin/`。Windows 使用静态 CRT。工具定义从 `assets/tools.json` 编译到程序中，更新该文件后需要重新构建。
 
-公开仓库通过版本 tag 构建各平台程序，并上传到对应 GitHub Release。启动脚本按 `assets/runtime.json` 中的版本和仓库下载，不自动切换到 `latest`。在 Bulbul 主仓库维护源码时，版本仍由根目录 `VERSION` 和 `tools/versioning/manage_version.py` 管理。
+公开仓库通过版本 tag 构建各平台程序，并上传到对应 GitHub Release。启动脚本按 `assets/runtime.json` 中的版本和仓库下载，不自动切换到 `latest`。客户端版本由本仓库的 `VERSION` 和 `scripts/manage_version.py` 管理，与 Bulbul 服务端分别维护。

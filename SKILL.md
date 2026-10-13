@@ -9,18 +9,18 @@ description: 使用 Bulbul 的真实鸟种、观鸟热点、地点预测、百�
 
 ## 使用工具
 
-优先使用已连接的 `bulbul-birding` MCP 工具。没有 MCP 时，使用本 skill 目录中的命令行入口，两种方式具有相同的工具和参数。
+使用本 skill 目录中的命令行入口。先用 `list <工具名>` 查看参数，再用 `call <工具名>` 调用；结果以 JSON 输出。
 
 ```bash
 bash <skill绝对路径>/scripts/bulbul.sh list species_predict
 bash <skill绝对路径>/scripts/bulbul.sh call species_predict --arguments-file <参数文件.json>
 ```
 
-把路径替换为本 skill 的实际目录；Windows 使用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <skill绝对路径>/scripts/bulbul.ps1`，后面接相同参数。启动脚本会按本 skill 的版本从公开仓库下载对应平台的 Rust 程序，核对 SHA-256 后运行，后续直接使用本机缓存。所有提示输出到 stderr，stdout 保留给业务 JSON 或 MCP。业务程序是 Rust 单文件，不需要 Python、Node.js、uv 或 Rust 编译环境，也不依赖当前工作目录。首次安装、登录或配置 MCP 时读取 [接入说明](references/setup.md)。普通用户通过浏览器登录，工具自动从系统凭据库读取账号；无需填写会话令牌。密码和令牌不放进聊天、参数文件或 Git，也不请求用户把登录响应发送给模型。
+把路径替换为本 skill 的实际目录；Windows 使用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <skill绝对路径>/scripts/bulbul.ps1`，后面接相同参数。启动脚本会按本 skill 的版本从公开仓库下载对应平台的 Rust 程序，核对 SHA-256 后运行，后续直接使用本机缓存。所有提示输出到 stderr，stdout 保留给业务 JSON。业务程序是 Rust 单文件，不需要 Python、Node.js、uv 或 Rust 编译环境，也不依赖当前工作目录。首次安装或登录时读取 [接入说明](references/setup.md)。普通用户通过浏览器登录，工具自动从系统凭据库读取账号；无需填写会话令牌。密码和令牌不放进聊天、参数文件或 Git，也不请求用户把登录响应发送给模型。
 
-尚未登录或遇到 401 时，使用 `bulbul_login` 开始登录，把授权码和链接告诉用户；用户在浏览器确认后再调用 `bulbul_login_complete`。返回 `pending` 时等待用户完成确认，不反复轮询。没有 MCP 时，请用户在自己的终端运行 `bulbul login`，可以用 `--no-browser` 在另一台设备上打开登录链接。`bulbul_auth_status` / `bulbul status` 查看当前账号；用户要求退出工具账号时使用 `bulbul_logout` / `bulbul logout`。登录、状态查询和退出都不返回令牌，不用服务令牌替代用户登录。
+尚未登录或遇到 401 时，请用户在自己的终端运行上述启动脚本的 `login` 命令，按提示在浏览器确认账号。程序会自动等待授权并保存登录；可以用 `--no-browser` 在另一台设备上打开登录链接。用 `status` 查看当前账号；用户要求退出工具账号时使用 `logout`。登录、状态查询和退出都不返回令牌，不用服务令牌替代用户登录。
 
-参数以 MCP 的 input schema 或 `list <工具名>` 输出为准。参数文件必须是 JSON object；命令行的 `--arguments-file` 可以避免 PowerShell、Bash 对 JSON 引号的不同处理。
+参数以 `list <工具名>` 输出的 `input_schema` 为准。参数文件必须是 JSON object；命令行的 `--arguments-file` 可以避免 PowerShell、Bash 对 JSON 引号的不同处理。
 
 ## 整理观鸟建议
 

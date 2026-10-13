@@ -172,9 +172,10 @@ impl BulbulClient {
                 json!({"status":"confirmation_required", "tool":name, "method":tool.method, "path":path, "query":query, "body":body}),
             );
         }
-        let token = self.account.token()?.ok_or_else(|| {
-            ToolError::new("尚未登录 Bulbul，请运行 login 或使用 bulbul_login 登录。")
-        })?;
+        let token = self
+            .account
+            .token()?
+            .ok_or_else(|| ToolError::new("尚未登录 Bulbul，请运行 bulbul login 登录。"))?;
         let method = Method::from_bytes(tool.method.as_bytes())
             .map_err(|_| ToolError::new("工具 HTTP 方法无效。"))?;
         let params = query

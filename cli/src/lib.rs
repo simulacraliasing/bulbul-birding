@@ -1,10 +1,9 @@
 pub mod account;
 pub mod client;
-pub mod mcp;
 
 use std::fmt;
 
-/// Only explicit, credential-free messages are exposed to CLI and MCP users.
+/// Only explicit, credential-free messages are exposed to CLI users.
 #[derive(Debug)]
 pub struct ToolError(pub String);
 

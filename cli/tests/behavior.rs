@@ -7,7 +7,6 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
@@ -541,106 +540,6 @@ async fn no_geocoder_key_sends_no_request() {
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 
-#[tokio::test]
-async fn actual_binary_runs_mcp_from_an_unrelated_working_directory() {
-    use std::process::Stdio;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    let directory = test_directory();
-    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_bulbul"))
-        .arg("mcp")
-        .current_dir(&directory)
-        .env_remove("BULBUL_API_URL")
-        .env_remove("BULBUL_SESSION_TOKEN")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
-    let mut input = child.stdin.take().unwrap();
-    let mut output = BufReader::new(child.stdout.take().unwrap()).lines();
-    async fn exchange(
-        input: &mut tokio::process::ChildStdin,
-        output: &mut tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
-        request: Value,
-    ) -> Value {
-        input
-            .write_all(format!("{request}\n").as_bytes())
-            .await
-            .unwrap();
-        input.flush().await.unwrap();
-        let line = tokio::time::timeout(Duration::from_secs(10), output.next_line())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        serde_json::from_str(&line).unwrap()
-    }
-    let response = exchange(&mut input,&mut output,json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}})).await;
-    assert_eq!(response["result"]["serverInfo"]["name"], "bulbul-birding");
-    input
-        .write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
-        .await
-        .unwrap();
-    let response = exchange(
-        &mut input,
-        &mut output,
-        json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
-    )
-    .await;
-    let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), TOOLS.len() + 4);
-    assert_eq!(
-        tools
-            .iter()
-            .find(|t| t["name"] == "species_list_replace_items")
-            .unwrap()["annotations"]["destructiveHint"],
-        true
-    );
-    for (id, name, arguments, expected_error) in [
-        (
-            3,
-            "species_list_create",
-            json!({"name":"预习","taxon_ids":[1]}),
-            false,
-        ),
-        (
-            4,
-            "species_wiki",
-            json!({"species_code":"private-input"}),
-            true,
-        ),
-        (
-            5,
-            "bulbul_login",
-            json!({"session_token":"private-token"}),
-            true,
-        ),
-    ] {
-        let response = exchange(&mut input,&mut output,json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":name,"arguments":arguments}})).await;
-        assert_eq!(
-            response["result"]["isError"].as_bool().unwrap_or(false),
-            expected_error
-        );
-        assert!(!response.to_string().contains("private-input"));
-        assert!(!response.to_string().contains("private-token"));
-        if !expected_error {
-            assert_eq!(
-                response["result"]["structuredContent"]["status"],
-                "confirmation_required"
-            );
-        }
-    }
-    drop(input);
-    assert!(
-        tokio::time::timeout(Duration::from_secs(10), child.wait())
-            .await
-            .unwrap()
-            .unwrap()
-            .success()
-    );
-}
-
 #[test]
 fn cli_reads_bom_files_and_never_echoes_bad_json_or_command_arguments() {
     let directory = test_directory();
@@ -669,6 +568,7 @@ fn cli_reads_bom_files_and_never_echoes_bad_json_or_command_arguments() {
     for args in [
         &["call", "species_wiki", "--arguments", "private-secret"][..],
         &["--private-secret"][..],
+        &["mcp"][..],
         &["call", "species_wiki", "--confirm"][..],
     ] {
         let output = run(args);
@@ -676,6 +576,17 @@ fn cli_reads_bom_files_and_never_echoes_bad_json_or_command_arguments() {
         assert!(output.stdout.is_empty());
         assert!(!String::from_utf8_lossy(&output.stderr).contains("private-secret"));
     }
+    let output = run(&["list"]);
+    assert!(output.status.success());
+    let tools: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(tools.as_array().unwrap().len(), TOOLS.len());
+    assert!(
+        tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tool| tool["input_schema"]["type"] == "object")
+    );
     let output = run(&["list", "species_wiki"]);
     assert!(output.status.success());
     assert_eq!(

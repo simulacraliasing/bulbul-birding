@@ -1,5 +1,5 @@
 # This launcher only prepares the native executable and forwards its arguments.
-# Keep all bootstrap messages on stderr so stdio MCP remains usable.
+# Keep all bootstrap messages on stderr so stdout contains only CLI results.
 Import-Module Microsoft.PowerShell.Utility
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'

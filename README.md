@@ -20,7 +20,7 @@ npx --yes skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g -a
 没有 Node.js 时，按接入说明用 Git 克隆到当前工具的 skill 目录。
 如果已经安装，确认来源是这个仓库后按原安装方式更新；同名目录来自其他来源时先说明情况，保留已有文件。
 
-安装后读取 SKILL.md，运行该目录的启动脚本，用 --version 和 list 验证程序下载、校验及工具发现是否正常。无需安装 Python 或 Rust，也无需从源码编译。
+安装后读取 SKILL.md，通过 CLI 使用观鸟工具，运行该目录的启动脚本，用 --version 和 list 验证程序下载、校验及工具发现是否正常。无需安装 Python 或 Rust，也无需从源码编译。
 最后告诉我实际安装目录、程序版本和在当前工具中如何使用；如果需要重新加载或重启，请说明。
 后续查询需要账号时，引导我在 Bulbul 浏览器页面完成登录。
 ```
@@ -35,9 +35,9 @@ npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 
 首次调用时，skill 的启动脚本会从本仓库的 GitHub Releases 下载对应平台的 Rust 程序，校验 SHA-256 后保存到本机。日常使用不需要 Node.js、Python 或 Rust，也不需要手动填写令牌。支持 Windows x64、macOS Intel / Apple Silicon、Linux x64 / ARM64。
 
-登录通过 Bulbul 网页完成，凭据保存在系统凭据库。工具使用普通用户的权限和额度。Skill 可以直接调用命令行；需要 MCP 时，同一个程序也提供 stdio MCP 服务。
+登录通过 Bulbul 网页完成，凭据保存在系统凭据库。工具使用普通用户的权限和额度。Skill 通过命令行查询和更新观鸟数据。
 
-完整的登录、更新和 MCP 配置见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-skills/releases)。
+完整的登录、更新和使用方式见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-skills/releases)。
 
 ## 开发与发布
 
