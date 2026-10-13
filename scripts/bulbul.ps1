@@ -3,6 +3,10 @@
 Import-Module Microsoft.PowerShell.Utility
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
+$utf8 = [Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = $utf8
+[Console]::OutputEncoding = $utf8
+$OutputEncoding = $utf8
 
 function Get-BulbulBinary {
     $skillDir = Split-Path -Parent $PSScriptRoot

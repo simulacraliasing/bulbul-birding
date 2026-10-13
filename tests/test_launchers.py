@@ -180,6 +180,7 @@ class LauncherTests(unittest.TestCase):
                 result = install.run("call", "species_list_create", "--arguments-file", str(arguments), mock=False)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(result.stdout)["status"], "confirmation_required")
+                self.assertEqual(json.loads(result.stdout)["body"]["name"], "预习清单")
                 self.assertEqual(install.run("unknown-command", mock=False).returncode, 2)
                 arguments.write_text("not json", encoding="utf-8")
                 result = install.run("call", "species_list_create", "--arguments-file", str(arguments), mock=False)
@@ -204,7 +205,7 @@ class LauncherTests(unittest.TestCase):
                 reader = threading.Thread(target=read_lines, daemon=True)
                 reader.start()
                 def send(value):
-                    process.stdin.write(json.dumps(value) + "\n")
+                    process.stdin.write(json.dumps(value, ensure_ascii=False) + "\n")
                     process.stdin.flush()
                 try:
                     send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
@@ -217,6 +218,13 @@ class LauncherTests(unittest.TestCase):
                     send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
                     response = json.loads(output.get(timeout=15))
                     self.assertEqual(len(response["result"]["tools"]), 25)
+                    send({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                        "name": "species_list_create", "arguments": {"name": "预习清单", "taxon_ids": [1]},
+                    }})
+                    response = json.loads(output.get(timeout=15))
+                    preview = json.loads(response["result"]["content"][0]["text"])
+                    self.assertEqual(preview["body"]["name"], "预习清单")
+                    self.assertEqual(preview["status"], "confirmation_required")
                 finally:
                     process.stdin.close()
                     try:
