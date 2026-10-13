@@ -90,13 +90,13 @@ jobs:
         run: |
           cargo fmt --check
           cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
-      - name: Test CLI and MCP behavior
+      - name: Test CLI behavior
         working-directory: cli
         run: cargo test --locked --target ${{ matrix.target }}
       - name: Build single executable
         working-directory: cli
         run: cargo build --release --locked --target ${{ matrix.target }}
-      - name: Test launchers and stdio MCP
+      - name: Test CLI launchers
         run: '"$TASK_PYTHON" tests/test_launchers.py'
       - name: Prepare release assets
         env:
