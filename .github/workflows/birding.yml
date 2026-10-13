@@ -1,0 +1,133 @@
+name: Birding skill
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+          - os: macos-15
+            target: aarch64-apple-darwin
+            suffix: ""
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            suffix: ""
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            suffix: ""
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            suffix: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.tmp/target
+      BULBUL_TEST_BINARY: ${{ github.workspace }}/.tmp/target/${{ matrix.target }}/release/bulbul${{ matrix.suffix }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "cli -> ../.tmp/target"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare test environment
+        run: |
+          uv venv .tmp/venv
+          if [ "$RUNNER_OS" = Windows ]; then
+            echo "TASK_PYTHON=$GITHUB_WORKSPACE/.tmp/venv/Scripts/python.exe" >> "$GITHUB_ENV"
+          else
+            echo "TASK_PYTHON=$GITHUB_WORKSPACE/.tmp/venv/bin/python" >> "$GITHUB_ENV"
+          fi
+      - name: Check version and tag
+        run: |
+          "$TASK_PYTHON" - <<'PY'
+          import json, os, pathlib, tomllib
+          root = pathlib.Path('.')
+          version = root.joinpath('VERSION').read_text().strip()
+          manifest = tomllib.loads(root.joinpath('cli/Cargo.toml').read_text())
+          lock = tomllib.loads(root.joinpath('cli/Cargo.lock').read_text())
+          runtime = json.loads(root.joinpath('assets/runtime.json').read_text())
+          assert version == manifest['package']['version'] == runtime['version']
+          assert runtime['repository'] == os.environ['GITHUB_REPOSITORY']
+          assert next(p['version'] for p in lock['package'] if p['name'] == 'bulbul-birding') == version
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              assert os.environ['GITHUB_REF_NAME'] == f'v{version}'
+          PY
+      - name: Check formatting and warnings
+        working-directory: cli
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
+      - name: Test CLI and MCP behavior
+        working-directory: cli
+        run: cargo test --locked --target ${{ matrix.target }}
+      - name: Build single executable
+        working-directory: cli
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Test launchers and stdio MCP
+        run: '"$TASK_PYTHON" tests/test_launchers.py'
+      - name: Prepare release assets
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+          RELEASE_SUFFIX: ${{ matrix.suffix }}
+        run: |
+          "$TASK_PYTHON" - <<'PY'
+          import hashlib, os, pathlib, shutil
+          version = pathlib.Path('VERSION').read_text().strip()
+          folder = pathlib.Path('.tmp/dist')
+          folder.mkdir(parents=True, exist_ok=True)
+          name = f"bulbul-{version}-{os.environ['RELEASE_TARGET']}{os.environ['RELEASE_SUFFIX']}"
+          binary = folder / name
+          shutil.copyfile(os.environ['BULBUL_TEST_BINARY'], binary)
+          digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+          (folder / f'{name}.sha256').write_text(f'{digest}  {name}\n', encoding='utf-8')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bulbul-${{ matrix.target }}
+          path: .tmp/dist/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bulbul-*
+          merge-multiple: true
+          path: .tmp/dist
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(find .tmp/dist -type f | wc -l)" -eq 10
+          cd .tmp/dist
+          sha256sum --check *.sha256
+          gh release create "$RELEASE_TAG" ./* --verify-tag --title "Bulbul $RELEASE_TAG" --generate-notes

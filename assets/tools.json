@@ -1,0 +1,1673 @@
+[
+  {
+    "name": "hotspots_nearby",
+    "description": "查询附近观鸟热点",
+    "method": "GET",
+    "path": "/hotspots/nearby",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "lat",
+      "lon",
+      "dist",
+      "back",
+      "limit"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        },
+        "dist": {
+          "default": 10,
+          "description": "Search radius in km",
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Dist",
+          "type": "integer"
+        },
+        "back": {
+          "anyOf": [
+            {
+              "maximum": 30,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Recent days",
+          "title": "Back"
+        },
+        "limit": {
+          "default": 20,
+          "description": "Max hotspots to return",
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "hotspots_species",
+    "description": "查询热点鸟种",
+    "method": "GET",
+    "path": "/hotspots/{source}/{hotspot_id}/species",
+    "mutation": false,
+    "path_keys": [
+      "source",
+      "hotspot_id"
+    ],
+    "query_keys": [
+      "limit",
+      "offset",
+      "back",
+      "source_hotspot_id"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "enum": [
+            "ebird",
+            "cnbirdreport",
+            "fused"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "hotspot_id": {
+          "title": "Hotspot Id",
+          "type": "string"
+        },
+        "limit": {
+          "default": 500,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "back": {
+          "anyOf": [
+            {
+              "maximum": 30,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Recent days",
+          "title": "Back"
+        },
+        "source_hotspot_id": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For fused hotspots, repeat as '<source>:<hotspot_id>'.",
+          "title": "Source Hotspot Id"
+        }
+      },
+      "required": [
+        "source",
+        "hotspot_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "hotspots_species_matches",
+    "description": "匹配目标鸟种与热点",
+    "method": "POST",
+    "path": "/hotspots/species-matches",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [],
+    "body_keys": [
+      "hotspots",
+      "taxon_ids"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "hotspots": {
+          "items": {
+            "properties": {
+              "distance_km": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Distance Km"
+              },
+              "id": {
+                "title": "Id",
+                "type": "string"
+              },
+              "latest_observation_date": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Latest Observation Date"
+              },
+              "latitude": {
+                "title": "Latitude",
+                "type": "number"
+              },
+              "longitude": {
+                "title": "Longitude",
+                "type": "number"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "source": {
+                "title": "Source",
+                "type": "string"
+              },
+              "source_hotspot_ids": {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "title": "Source Hotspot Ids",
+                "type": "object"
+              },
+              "sources": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Sources",
+                "type": "array"
+              },
+              "species_count": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Species Count"
+              }
+            },
+            "required": [
+              "id",
+              "source",
+              "name",
+              "latitude",
+              "longitude"
+            ],
+            "title": "BirdingHotspotResponse",
+            "type": "object"
+          },
+          "maxItems": 100,
+          "title": "Hotspots",
+          "type": "array"
+        },
+        "taxon_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 1000,
+          "title": "Taxon Ids",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "hotspots_target_destinations",
+    "description": "按目标 taxon_id 推荐观鸟地点",
+    "method": "GET",
+    "path": "/hotspots/target-destinations",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "lat",
+      "lon",
+      "dist",
+      "target_date",
+      "taxon_id",
+      "species_list_id",
+      "limit",
+      "back",
+      "window",
+      "sort"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lat"
+        },
+        "lon": {
+          "anyOf": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lon"
+        },
+        "dist": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Search radius in km",
+          "title": "Dist"
+        },
+        "target_date": {
+          "description": "Target date (YYYY-MM-DD)",
+          "format": "date",
+          "title": "Target Date",
+          "type": "string"
+        },
+        "taxon_id": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Target taxon_id; may repeat",
+          "title": "Taxon Id"
+        },
+        "species_list_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Species List Id"
+        },
+        "limit": {
+          "default": 20,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "back": {
+          "default": 30,
+          "description": "Recent days",
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Back",
+          "type": "integer"
+        },
+        "window": {
+          "default": 14,
+          "description": "Historical date window",
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Window",
+          "type": "integer"
+        },
+        "sort": {
+          "default": "targetCoverage",
+          "enum": [
+            "targetCoverage",
+            "distance",
+            "recordCount"
+          ],
+          "title": "Sort",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_predict",
+    "description": "预测地点在指定日期的鸟种；与网页一样保存最近查询",
+    "method": "GET",
+    "path": "/species/predict",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "lat",
+      "lon",
+      "target_date",
+      "place_name",
+      "window",
+      "dist",
+      "back"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": "items",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        },
+        "target_date": {
+          "description": "Target date (YYYY-MM-DD)",
+          "format": "date",
+          "title": "Target Date",
+          "type": "string"
+        },
+        "place_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Place Name"
+        },
+        "window": {
+          "default": 14,
+          "minimum": 1,
+          "title": "Window",
+          "type": "integer"
+        },
+        "dist": {
+          "default": 50,
+          "description": "Search radius in km",
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Dist",
+          "type": "integer"
+        },
+        "back": {
+          "default": 30,
+          "description": "Recent days",
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Back",
+          "type": "integer"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "required": [
+        "lat",
+        "lon",
+        "target_date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_catalog",
+    "description": "搜索鸟种目录，解析项目内 taxon_id",
+    "method": "GET",
+    "path": "/species/catalog",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "q",
+      "taxon_id",
+      "region",
+      "level",
+      "order",
+      "order_cn",
+      "family",
+      "family_cn",
+      "limit",
+      "offset"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Q"
+        },
+        "taxon_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Taxon Id"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional region code filter, e.g. CN",
+          "title": "Region"
+        },
+        "level": {
+          "default": "species",
+          "enum": [
+            "species",
+            "order",
+            "family"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "order": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Order"
+        },
+        "order_cn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Order Cn"
+        },
+        "family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Family"
+        },
+        "family_cn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Family Cn"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_wiki",
+    "description": "读取鸟种百科",
+    "method": "GET",
+    "path": "/species/{taxon_id}/wiki",
+    "mutation": false,
+    "path_keys": [
+      "taxon_id"
+    ],
+    "query_keys": [
+      "view",
+      "language"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taxon_id": {
+          "title": "Taxon Id",
+          "type": "integer"
+        },
+        "view": {
+          "default": "short",
+          "enum": [
+            "short",
+            "full"
+          ],
+          "title": "View",
+          "type": "string"
+        },
+        "language": {
+          "default": "zh",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "title": "Language",
+          "type": "string"
+        }
+      },
+      "required": [
+        "taxon_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_detail",
+    "description": "读取鸟种详情和相似种",
+    "method": "POST",
+    "path": "/species/{taxon_id}/detail",
+    "mutation": false,
+    "path_keys": [
+      "taxon_id"
+    ],
+    "query_keys": [
+      "language"
+    ],
+    "body_keys": [
+      "compare_limit",
+      "prediction_taxon_ids"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taxon_id": {
+          "title": "Taxon Id",
+          "type": "integer"
+        },
+        "language": {
+          "default": "zh",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "compare_limit": {
+          "default": 3,
+          "maximum": 10.0,
+          "minimum": 1.0,
+          "title": "Compare Limit",
+          "type": "integer"
+        },
+        "prediction_taxon_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Prediction Taxon Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "taxon_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_range_map",
+    "description": "读取鸟种分布图元数据",
+    "method": "GET",
+    "path": "/species/{taxon_id}/range-map",
+    "mutation": false,
+    "path_keys": [
+      "taxon_id"
+    ],
+    "query_keys": [],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taxon_id": {
+          "title": "Taxon Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "taxon_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_etymology",
+    "description": "读取鸟种名称词源",
+    "method": "GET",
+    "path": "/species/{taxon_id}/etymology",
+    "mutation": false,
+    "path_keys": [
+      "taxon_id"
+    ],
+    "query_keys": [],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taxon_id": {
+          "title": "Taxon Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "taxon_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "quiz_taxonomy_options",
+    "description": "读取可用于练习的分类范围",
+    "method": "GET",
+    "path": "/quiz/custom-taxonomy-options",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "region",
+      "question_kind"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "const": "CN",
+          "default": "CN",
+          "title": "Region",
+          "type": "string"
+        },
+        "question_kind": {
+          "default": "mixed",
+          "enum": [
+            "photo",
+            "audio",
+            "mixed"
+          ],
+          "title": "Question Kind",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "saved_queries",
+    "description": "读取当前用户最近的地点预测",
+    "method": "GET",
+    "path": "/me/saved-queries",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": "snapshots",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_lists",
+    "description": "读取当前用户的鸟种清单摘要",
+    "method": "GET",
+    "path": "/me/species-lists",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": "lists",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_list_detail",
+    "description": "分页读取当前用户的鸟种清单",
+    "method": "GET",
+    "path": "/me/species-lists/{list_id}",
+    "mutation": false,
+    "path_keys": [
+      "list_id"
+    ],
+    "query_keys": [
+      "limit",
+      "offset"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "list_id": {
+          "title": "List Id",
+          "type": "string"
+        },
+        "limit": {
+          "default": 300,
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "list_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "quiz_route_book_create",
+    "description": "生成路线书练习；取得用户授权后传 confirm=true",
+    "method": "POST",
+    "path": "/quiz/route-book",
+    "mutation": true,
+    "path_keys": [],
+    "query_keys": [
+      "language"
+    ],
+    "body_keys": [
+      "compare_limit",
+      "prediction_items",
+      "seed",
+      "snapshot_id",
+      "snapshot_summary",
+      "title"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "default": "zh",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "compare_limit": {
+          "default": 3,
+          "maximum": 10.0,
+          "minimum": 1.0,
+          "title": "Compare Limit",
+          "type": "integer"
+        },
+        "prediction_items": {
+          "items": {
+            "description": "A single species prediction with unusualness info.",
+            "properties": {
+              "canonical_name": {
+                "title": "Canonical Name",
+                "type": "string"
+              },
+              "chinese_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Chinese Name"
+              },
+              "english_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "English Name"
+              },
+              "history_count": {
+                "default": 0,
+                "title": "History Count",
+                "type": "integer"
+              },
+              "history_rate": {
+                "default": 0,
+                "title": "History Rate",
+                "type": "number"
+              },
+              "history_weight": {
+                "default": 0,
+                "title": "History Weight",
+                "type": "number"
+              },
+              "image": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "icon_version": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Icon Version"
+                      },
+                      "thumbnail_url": {
+                        "title": "Thumbnail Url",
+                        "type": "string"
+                      },
+                      "thumbnail_width": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Thumbnail Width"
+                      }
+                    },
+                    "required": [
+                      "thumbnail_url"
+                    ],
+                    "title": "PredictionImage",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "is_new": {
+                "default": false,
+                "title": "Is New",
+                "type": "boolean"
+              },
+              "latest_event_date": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Latest Event Date"
+              },
+              "recent_count": {
+                "default": 0,
+                "title": "Recent Count",
+                "type": "integer"
+              },
+              "recent_rate": {
+                "default": 0,
+                "title": "Recent Rate",
+                "type": "number"
+              },
+              "recent_weight": {
+                "default": 0,
+                "title": "Recent Weight",
+                "type": "number"
+              },
+              "scientific_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Scientific Name"
+              },
+              "score": {
+                "default": 0,
+                "title": "Score",
+                "type": "number"
+              },
+              "taxon_id": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Taxon Id"
+              },
+              "taxonomy": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "family": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Family"
+                      },
+                      "family_cn": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Family Cn"
+                      },
+                      "genus": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Genus"
+                      },
+                      "genus_cn": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Genus Cn"
+                      },
+                      "order": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Order"
+                      },
+                      "order_cn": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "title": "Order Cn"
+                      }
+                    },
+                    "title": "PredictionTaxonomy",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "unusualness": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Unusualness"
+              }
+            },
+            "required": [
+              "canonical_name"
+            ],
+            "title": "PredictionItem",
+            "type": "object"
+          },
+          "title": "Prediction Items",
+          "type": "array"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Seed"
+        },
+        "snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Snapshot Id"
+        },
+        "snapshot_summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Snapshot Summary"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "用户已授权本次操作时设为 true；false 只返回操作预览"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "quiz_custom_batch_create",
+    "description": "生成自定义练习；取得用户授权后传 confirm=true",
+    "method": "POST",
+    "path": "/quiz/custom-batch",
+    "mutation": true,
+    "path_keys": [],
+    "query_keys": [
+      "language"
+    ],
+    "body_keys": [
+      "batch_index",
+      "batch_size",
+      "difficulty",
+      "exclude_asset_ids",
+      "exclude_question_ids",
+      "question_kind",
+      "region",
+      "species_list_id",
+      "taxon_filter"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "language": {
+          "default": "zh",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "batch_index": {
+          "default": 0,
+          "minimum": 0.0,
+          "title": "Batch Index",
+          "type": "integer"
+        },
+        "batch_size": {
+          "default": 10,
+          "maximum": 20.0,
+          "minimum": 1.0,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "difficulty": {
+          "default": "medium",
+          "enum": [
+            "easy",
+            "medium",
+            "hard",
+            "expert"
+          ],
+          "title": "Difficulty",
+          "type": "string"
+        },
+        "exclude_asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude Asset Ids",
+          "type": "array"
+        },
+        "exclude_question_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude Question Ids",
+          "type": "array"
+        },
+        "question_kind": {
+          "default": "mixed",
+          "enum": [
+            "photo",
+            "audio",
+            "mixed"
+          ],
+          "title": "Question Kind",
+          "type": "string"
+        },
+        "region": {
+          "const": "CN",
+          "default": "CN",
+          "title": "Region",
+          "type": "string"
+        },
+        "species_list_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Species List Id"
+        },
+        "taxon_filter": {
+          "anyOf": [
+            {
+              "properties": {
+                "rank": {
+                  "enum": [
+                    "order",
+                    "family"
+                  ],
+                  "title": "Rank",
+                  "type": "string"
+                },
+                "taxon_id": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Taxon Id"
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Value"
+                },
+                "values": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "title": "Values",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "rank"
+              ],
+              "title": "QuizCustomTaxonFilter",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "用户已授权本次操作时设为 true；false 只返回操作预览"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_list_create",
+    "description": "保存鸟种清单；取得用户授权后传 confirm=true",
+    "method": "POST",
+    "path": "/me/species-lists",
+    "mutation": true,
+    "path_keys": [],
+    "query_keys": [],
+    "body_keys": [
+      "description",
+      "name",
+      "taxon_ids"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "taxon_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 20000,
+          "title": "Taxon Ids",
+          "type": "array"
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "用户已授权本次操作时设为 true；false 只返回操作预览"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_list_from_saved_query",
+    "description": "从最近查询保存清单；取得用户授权后传 confirm=true",
+    "method": "POST",
+    "path": "/me/species-lists/from-saved-query",
+    "mutation": true,
+    "path_keys": [],
+    "query_keys": [],
+    "body_keys": [
+      "description",
+      "name",
+      "saved_query_id"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "saved_query_id": {
+          "minLength": 1,
+          "title": "Saved Query Id",
+          "type": "string"
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "用户已授权本次操作时设为 true；false 只返回操作预览"
+        }
+      },
+      "required": [
+        "saved_query_id",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_list_from_taxonomy",
+    "description": "从分类范围保存清单；取得用户授权后传 confirm=true",
+    "method": "POST",
+    "path": "/me/species-lists/from-taxonomy",
+    "mutation": true,
+    "path_keys": [],
+    "query_keys": [],
+    "body_keys": [
+      "description",
+      "name",
+      "rank",
+      "region",
+      "values"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "rank": {
+          "enum": [
+            "order",
+            "family"
+          ],
+          "title": "Rank",
+          "type": "string"
+        },
+        "region": {
+          "const": "CN",
+          "default": "CN",
+          "title": "Region",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Values",
+          "type": "array"
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "用户已授权本次操作时设为 true；false 只返回操作预览"
+        }
+      },
+      "required": [
+        "rank",
+        "values",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "species_list_replace_items",
+    "description": "替换清单全部鸟种；取得用户授权后传 confirm=true",
+    "method": "PUT",
+    "path": "/me/species-lists/{list_id}/items",
+    "mutation": true,
+    "path_keys": [
+      "list_id"
+    ],
+    "query_keys": [],
+    "body_keys": [
+      "target_mode",
+      "taxon_ids"
+    ],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "list_id": {
+          "title": "List Id",
+          "type": "string"
+        },
+        "target_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "manual"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Target Mode"
+        },
+        "taxon_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 20000,
+          "title": "Taxon Ids",
+          "type": "array"
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "用户已授权本次操作时设为 true；false 只返回操作预览"
+        }
+      },
+      "required": [
+        "list_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "location_search",
+    "description": "用天地图搜索地点候选；同名或多候选时请用户选择，再使用返回的坐标",
+    "mutation": false,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 5
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    }
+  }
+]
