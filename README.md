@@ -1,11 +1,34 @@
-# Bulbul 观鸟 skill
+# Bulbul Skills
 
 在 Codex、Claude Code 和 pi 中使用 Bulbul 的鸟种、地点预测、观鸟热点、百科、清单和练习数据，准备行程和学习识别鸟类。
+
+## 让 AI agent 安装
+
+把下面这段话复制给 Codex、Claude Code 或 pi，它就可以完成安装：
+
+```text
+请在我当前使用的 AI 工具中安装 Bulbul 观鸟 skill。
+
+仓库：https://github.com/simulacraliasing/bulbul-skills
+skill 名称：bulbul-birding
+
+先阅读仓库的 README.md 和 references/setup.md，识别当前工具是 Codex、Claude Code 还是 pi，安装到该工具的用户级 skill 目录。
+
+优先使用环境中已有的 skill 安装器。使用 skills CLI 时，运行：
+npx --yes skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g -a <当前工具> -y
+将 <当前工具> 替换为 codex、claude-code 或 pi。
+没有 Node.js 时，按接入说明用 Git 克隆到当前工具的 skill 目录。
+如果已经安装，确认来源是这个仓库后按原安装方式更新；同名目录来自其他来源时先说明情况，保留已有文件。
+
+安装后读取 SKILL.md，运行该目录的启动脚本，用 --version 和 list 验证程序下载、校验及工具发现是否正常。无需安装 Python 或 Rust，也无需从源码编译。
+最后告诉我实际安装目录、程序版本和在当前工具中如何使用；如果需要重新加载或重启，请说明。
+后续查询需要账号时，引导我在 Bulbul 浏览器页面完成登录。
+```
 
 ## 安装
 
 ```bash
-npx skills add simulacraliasing/bulbul-birding --skill bulbul-birding -g
+npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 ```
 
 按提示选择使用的工具，或追加 `-a codex claude-code pi`。已有 Git 的用户也可以直接克隆到对应工具的 skill 目录。
@@ -14,7 +37,7 @@ npx skills add simulacraliasing/bulbul-birding --skill bulbul-birding -g
 
 登录通过 Bulbul 网页完成，凭据保存在系统凭据库。工具使用普通用户的权限和额度。Skill 可以直接调用命令行；需要 MCP 时，同一个程序也提供 stdio MCP 服务。
 
-完整的登录、更新和 MCP 配置见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-birding/releases)。
+完整的登录、更新和 MCP 配置见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-skills/releases)。
 
 ## 开发与发布
 

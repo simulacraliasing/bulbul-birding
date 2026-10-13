@@ -1,19 +1,19 @@
 # 接入 Codex、Claude Code 和 pi
 
-Skill 从公开仓库 [simulacraliasing/bulbul-birding](https://github.com/simulacraliasing/bulbul-birding) 安装。首次使用时，启动脚本会下载与 skill 版本一致的 Rust 程序，校验 SHA-256 后保存到 skill 的 `bin/`。后续使用本机缓存，不需要编译。
+Skill 从公开仓库 [simulacraliasing/bulbul-skills](https://github.com/simulacraliasing/bulbul-skills) 安装。首次使用时，启动脚本会下载与 skill 版本一致的 Rust 程序，校验 SHA-256 后保存到 skill 的 `bin/`。后续使用本机缓存，不需要编译。
 
 ## 从 Git 安装
 
 在终端执行：
 
 ```bash
-npx skills add simulacraliasing/bulbul-birding --skill bulbul-birding -g
+npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 ```
 
 按提示选择使用的工具，也可以明确指定：
 
 ```bash
-npx skills add simulacraliasing/bulbul-birding --skill bulbul-birding -g -a codex claude-code pi
+npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g -a codex claude-code pi
 ```
 
 `-g` 表示用户级安装，所有项目都能使用；去掉它则安装到当前项目。安装器负责选择 skill 目录，无需自己复制文件。这个安装方式需要 Node.js；日常使用的观鸟程序不需要 Node.js、Python 或 Rust。
@@ -21,7 +21,7 @@ npx skills add simulacraliasing/bulbul-birding --skill bulbul-birding -g -a code
 已有 Git 时也可以直接克隆到 skill 目录。Codex 的用户级目录为 `~/.agents/skills/bulbul-birding`，Claude Code 为 `~/.claude/skills/bulbul-birding`，pi 为 `~/.pi/agent/skills/bulbul-birding`。下面以 Codex 为例：
 
 ```bash
-git clone https://github.com/simulacraliasing/bulbul-birding.git ~/.agents/skills/bulbul-birding
+git clone https://github.com/simulacraliasing/bulbul-skills.git ~/.agents/skills/bulbul-birding
 ```
 
 更新安装器安装的 skill 使用 `npx skills update bulbul-birding -g`；克隆安装的目录使用 `git pull --ff-only`。新版本首次调用时会获取对应程序。
