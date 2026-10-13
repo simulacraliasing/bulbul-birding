@@ -28,6 +28,27 @@ cargo test --locked
 cargo build --release --locked
 ```
 
-`VERSION`、`assets/runtime.json`、Cargo manifest 和 lockfile 的版本需要一致。主分支和 pull request 会检查并构建五个平台；`v<version>` tag 在全部验证通过后发布程序和 SHA-256 文件。启动脚本固定使用 skill 对应版本，更新 skill 后才会切换程序版本。
+客户端在这个仓库独立维护，版本与 Bulbul 服务端分别管理。`VERSION` 是客户端版本的唯一来源，`assets/runtime.json`、Cargo manifest 和 lockfile 通过版本脚本同步。维护脚本需要 Python 3.12 或更高版本，使用项目虚拟环境：
 
-维护者从 Bulbul 项目通过 `tools/birding/export_public_skill.py` 导出明确列出的文件，审阅差异后提交到这里。这个仓库具有独立的 Git 历史，包含观鸟工具所需的源码和数据结构。
+```bash
+uv venv .venv
+# Windows 使用 .venv/Scripts/python.exe，macOS / Linux 使用 .venv/bin/python
+.venv/bin/python scripts/manage_version.py check
+.venv/bin/python scripts/manage_version.py sync
+# 准备客户端发版时才更新版本
+.venv/bin/python scripts/manage_version.py set 0.39.0
+.venv/bin/python tests/test_maintenance.py
+```
+
+主分支和 pull request 会检查并构建五个平台；`v<version>` tag 在全部验证通过后发布程序和 SHA-256 文件。启动脚本固定使用 skill 对应版本，更新 skill 后才会切换程序版本。
+
+工具参数来自 Bulbul 的 public v1 OpenAPI 契约。服务端更新接口后，先导出并提供这份公开契约文件，再在此仓库生成工具定义；传入路径即可，不需要检出 Bulbul 源码：
+
+```bash
+.venv/bin/python scripts/export_birding_tools.py --openapi /path/to/public-v1.json
+.venv/bin/python scripts/export_birding_tools.py --openapi /path/to/public-v1.json --check
+```
+
+审阅 `assets/tools.json` 的变化，再运行 Rust 测试和构建。添加工具时在 `scripts/export_birding_tools.py` 的明确列表中选择公开业务接口，并更新 skill 说明和行为测试。业务 API、浏览器授权页面、服务端鉴权及数据库仍由 Bulbul 项目维护。
+
+`tests/test_maintenance.py` 不需要服务端目录；启动脚本测试需要先编译程序，并通过 `BULBUL_TEST_BINARY` 指定程序路径。CI 在五个平台运行维护脚本、Rust 和启动脚本测试。
