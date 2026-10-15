@@ -67,6 +67,12 @@ bulbul call species_catalog --arguments-file /absolute/path/arguments.json
 
 如果之前配置过 `bulbul-birding` MCP 服务，在当前 AI 工具的设置中移除这一项，保留已安装的 skill。系统凭据库中已有的账号登录可继续用于 CLI。
 
+## 上传照片或声音
+
+使用 `list identify_photo`、`list identify_audio` 查看参数，文件路径传入 `file`。文件会上传到 Bulbul 云端，识别不会下载本地模型。已知地点和日期时提供经纬度及 `captured_at`，无需配置模型路径或额外令牌。
+
+声音支持 WAV、FLAC、MP3、M4A（AAC/ALAC）、AIFF 和 Ogg Vorbis；Opus 需先转成 WAV。照片限制 20 MB，声音完整文件限制 50 MB、0.5–300 秒。选区不能绕过时长上限，超过 5 分钟时先截取或拆分文件。CLI 仅对明确未受理的 429 按 Retry-After 最多重试 2 次，重试前累计自动等待最多 20 秒；超时或网络错误不重新上传。
+
 ## 可选配置
 
 | 变量                   | 用途                                                                        |

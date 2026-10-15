@@ -182,17 +182,82 @@ pub async fn http_json(
     if let Some(token) = token {
         request = request.bearer_auth(token);
     }
-    let mut response = request
+    read_json_response(request).await
+}
+
+pub async fn read_json_response(request: reqwest::RequestBuilder) -> Result<Value> {
+    let response = request
         .send()
         .await
         .map_err(|_| ToolError::new("暂时无法连接 Bulbul，请检查网络后重试。"))?;
+    decode_json_response(response).await
+}
+
+// Retry only admission rejections, never a request with an uncertain processing outcome.
+pub async fn read_json_response_with_overload_retry<F>(make_request: F) -> Result<Value>
+where
+    F: Fn() -> Result<reqwest::RequestBuilder>,
+{
+    let started = std::time::Instant::now();
+    let mut retries = 0;
+    loop {
+        let response = make_request()?
+            .send()
+            .await
+            .map_err(|_| ToolError::new("暂时无法连接 Bulbul，没有自动重新上传文件。"))?;
+        let delay = if response.status() == StatusCode::TOO_MANY_REQUESTS
+            && response
+                .headers()
+                .get("x-bulbul-request-accepted")
+                .and_then(|v| v.to_str().ok())
+                == Some("false")
+        {
+            response
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok())
+                .filter(|seconds| *seconds <= 10)
+                .map(Duration::from_secs)
+        } else {
+            None
+        };
+        if let Some(delay) = delay
+            && retries < 2
+            && started.elapsed().saturating_add(delay) <= Duration::from_secs(20)
+        {
+            retries += 1;
+            drop(response);
+            eprintln!(
+                "识别请求尚未受理，等待 {} 秒后重试（{}/2）。",
+                delay.as_secs(),
+                retries
+            );
+            tokio::time::sleep(delay).await;
+            continue;
+        }
+        return decode_json_response(response).await;
+    }
+}
+
+async fn decode_json_response(mut response: reqwest::Response) -> Result<Value> {
     match response.status() {
         StatusCode::UNAUTHORIZED => {
             return Err(ToolError::new(
                 "Bulbul 登录已过期，请重新运行 bulbul login 登录。",
             ));
         }
-        StatusCode::TOO_MANY_REQUESTS => return Err(ToolError::new("请求较频繁，请稍后重试。")),
+        StatusCode::TOO_MANY_REQUESTS => {
+            let seconds = response
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok());
+            return Err(ToolError::new(seconds.map_or_else(
+                || "请求较频繁或服务繁忙，请稍后重试。".to_owned(),
+                |seconds| format!("请求较频繁或服务繁忙，请等待 {seconds} 秒后重试。"),
+            )));
+        }
         StatusCode::NO_CONTENT => return Ok(json!({})),
         status if !status.is_success() => {
             return Err(ToolError::new(format!(

@@ -1,6 +1,6 @@
 ---
 name: bulbul-birding
-description: 使用 Bulbul 的真实鸟种、观鸟热点、地点预测、百科、用户清单和练习数据，帮助用户准备观鸟行程、学习和练习。适用于行前预习、按目标鸟种找地点、读取最近查询或保存鸟种清单。
+description: 使用 Bulbul 的真实鸟种、观鸟热点、地点预测、百科、用户清单和练习数据，帮助用户准备观鸟行程、学习和练习。适用于行前预习、按目标鸟种找地点、读取最近查询、保存鸟种清单，或识别用户提供的鸟类照片和鸟声文件。
 ---
 
 # Bulbul 观鸟准备
@@ -31,6 +31,14 @@ bash <skill绝对路径>/scripts/bulbul.sh call species_predict --arguments-file
 - 用 `species_wiki`、`species_detail` 读取识别特征和相似种。返回 `pending` 时说明资料尚未就绪，不补造百科或分布结果。
 - 用户提到最近查询或已有清单时，使用 `saved_queries`、`species_lists`、`species_list_detail`。最近查询使用返回的 `snapshots[].id`，作为后续请求的 `snapshot_id` 或 `saved_query_id`；清单使用返回的 `list_id`。结果含 `truncated` 或分页参数时，说明覆盖范围，需要时继续读取。
 - 建议区分预测、历史记录和实际观察，不把概率当作保证能看到。保留工具返回的来源和日期，地点坐标、鸟种 ID 和清单 ID 都来自真实结果。
+
+## 照片和声音识别
+
+用户要求识别文件时，先查看 `identify_photo` 或 `identify_audio` 的 schema，传入 `file` 的本地绝对路径。文件会上传到 Bulbul 云端；无法直接访问的附件先取得可读取的本地文件。照片最多 20 MB；声音完整文件最多 50 MB、0.5–300 秒，选区不能绕过完整文件的长度限制；超过 5 分钟时先按用户需要截取或拆分。支持 WAV、FLAC、MP3、M4A（AAC/ALAC）、AIFF、Ogg Vorbis。Opus 先用可用工具转为 WAV。
+
+已知拍摄或录音地点、日期时传入 `latitude`、`longitude`、`captured_at`（YYYY-MM-DD），云端按这些信息运行 Geomodel。缺少信息时询问用户或使用已有地区；不要猜位置、使用今天代替录音日期，或自行计算校准权重。没有完整地点日期时返回地区校准或未校准结果，说明实际状态。应用仍使用自己的本地模型，CLI 不下载模型。
+
+声音默认与应用相同：3 秒窗口、1.5 秒步长、标准灵敏度、连续确认、高通关闭。返回的 `score` 是原始分数，`rank_score` 用于排序；保留 `distribution_mismatch` 提示和时间片段，不把候选当作已确认观察。机器结果按校准分数排序；应用界面的“最近出现”只改变显示顺序。需要调查相似种时用返回的 `taxon_id` 查询百科。CLI 仅对明确未受理、带 Retry-After 的 429 最多自动重试 2 次，重试前累计自动等待最多 20 秒。仍繁忙时按提示等待，不再由 Agent 连续重试；网络错误、超时和其他失败不自动重新上传。录音超过 5 分钟时需要截取或拆分文件，单纯指定选区不能绕过上限。
 
 ## 清单和练习
 

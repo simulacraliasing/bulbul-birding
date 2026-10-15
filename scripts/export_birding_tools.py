@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DESTINATION = ROOT / "assets/tools.json"
 # The explicit list keeps admin, worker and unrelated user APIs out of the harness.
 OPERATIONS = [
+    ("identify_photo", "POST", "/bird-identification/identify", "上传本地鸟类照片，使用云端 Geomodel 按拍摄地点和日期校准", False, None),
+    ("identify_audio", "POST", "/bird-identification/audio/identify", "上传本地鸟声文件，使用云端 BirdNET 与 Geomodel 识别并返回时间片段", False, None),
     ("hotspots_nearby", "GET", "/hotspots/nearby", "查询附近观鸟热点", False, None),
     ("hotspots_species", "GET", "/hotspots/{source}/{hotspot_id}/species", "查询热点鸟种", False, None),
     ("hotspots_species_matches", "POST", "/hotspots/species-matches", "匹配目标鸟种与热点", False, None),
@@ -62,16 +64,32 @@ def build_tools(contract: dict) -> list[dict]:
             if parameter.get("required"):
                 required.append(key)
             (path_keys if parameter["in"] == "path" else query_keys).append(key)
+        upload = None
         if "requestBody" in operation:
-            body = resolve(operation["requestBody"]["content"]["application/json"]["schema"])
-            properties.update(body["properties"])
-            required.extend(body.get("required", []))
-            body_keys.extend(body["properties"])
+            content = operation["requestBody"]["content"]
+            if "multipart/form-data" in content:
+                body = resolve(content["multipart/form-data"]["schema"])
+                file = body["properties"]["file"]
+                if file.get("format") != "binary" and file.get("contentMediaType") != "application/octet-stream":
+                    raise ValueError("Upload operation needs one binary file field")
+                properties["file"] = {"type": "string", "minLength": 1, "description": "需要上传的本地文件绝对路径；声音完整文件最多 5 分钟、50 MB，选区不能绕过时长限制；不支持远程 URL" if name == "identify_audio" else "需要上传的本地文件绝对路径；不支持远程 URL"}
+                required.append("file")
+                upload = {"file_key": "file", "max_file_bytes": (20 if name == "identify_photo" else 50) * 1024 * 1024,
+                          "timeout_seconds": 90 if name == "identify_photo" else 230}
+                # Local Geomodel weights remain an application-only form field.
+                if name == "identify_photo":
+                    properties["cloud_calibration"] = {"type": "boolean", "const": True, "default": True}
+            else:
+                body = resolve(content["application/json"]["schema"])
+                properties.update(body["properties"])
+                required.extend(body.get("required", []))
+                body_keys.extend(body["properties"])
         if result_limit:
             properties["limit"] = {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}
         if mutation:
             properties["confirm"] = {"type": "boolean", "default": False, "description": "用户已授权本次操作时设为 true；false 只返回操作预览"}
         tools.append({
+            **(upload or {}),
             "name": name, "description": description, "method": method, "path": path,
             "mutation": mutation, "path_keys": path_keys, "query_keys": query_keys,
             "body_keys": body_keys, "has_body": "requestBody" in operation,

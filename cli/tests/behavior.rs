@@ -594,3 +594,265 @@ fn cli_reads_bom_files_and_never_echoes_bad_json_or_command_arguments() {
         "species_wiki"
     );
 }
+
+#[tokio::test]
+async fn uploads_local_files_with_auth_and_cloud_calibration_without_disclosing_paths() {
+    let server = MockServer::start().await;
+    let client = with_token(&server);
+    let directory = test_directory();
+    let file = directory.join("private-local-filename.wav");
+    std::fs::write(&file, b"file-fixture-content").unwrap();
+    for (tool, route) in [
+        ("identify_photo", "/api/v1/bird-identification/identify"),
+        (
+            "identify_audio",
+            "/api/v1/bird-identification/audio/identify",
+        ),
+    ] {
+        Mock::given(method("POST"))
+            .and(path(route))
+            .and(header("authorization", "Bearer private-test-token"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"candidates":[], "calibration_status":"geomodel"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let result = client.call(tool, json!({"file":file, "latitude":39.9, "longitude":116.4, "captured_at":"2026-10-14"})).await.unwrap();
+        assert_eq!(result["calibration_status"], "geomodel");
+    }
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        let body = String::from_utf8_lossy(&request.body);
+        assert!(body.contains("name=\"file\""));
+        assert!(body.contains("file-fixture-content"));
+        assert!(!body.contains("private-local-filename"));
+        assert!(!body.contains("private-test-token"));
+        assert_eq!(
+            request
+                .url
+                .query_pairs()
+                .find(|(k, _)| k == "captured_at")
+                .unwrap()
+                .1,
+            "2026-10-14"
+        );
+    }
+    assert_eq!(
+        requests[0]
+            .url
+            .query_pairs()
+            .find(|(k, _)| k == "cloud_calibration")
+            .unwrap()
+            .1,
+        "true"
+    );
+    assert_eq!(
+        requests[1]
+            .url
+            .query_pairs()
+            .find(|(k, _)| k == "window_seconds")
+            .unwrap()
+            .1,
+        "3"
+    );
+}
+
+#[tokio::test]
+async fn invalid_or_oversized_files_send_no_upload() {
+    let server = MockServer::start().await;
+    let client = with_token(&server);
+    let directory = test_directory();
+    let empty = directory.join("empty.wav");
+    std::fs::write(&empty, b"").unwrap();
+    let oversized = directory.join("oversized.wav");
+    std::fs::File::create(&oversized)
+        .unwrap()
+        .set_len(50 * 1024 * 1024 + 1)
+        .unwrap();
+    for file in [
+        directory.join("missing.wav"),
+        directory.clone(),
+        empty,
+        oversized,
+    ] {
+        assert!(
+            client
+                .call("identify_audio", json!({"file":file}))
+                .await
+                .is_err()
+        );
+    }
+    assert!(
+        client
+            .call(
+                "identify_photo",
+                json!({"file":"private-path", "geographic_calibration":"private-weights"})
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        client
+            .call(
+                "identify_photo",
+                json!({"file":"private-path", "cloud_calibration":false})
+            )
+            .await
+            .is_err()
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn failed_uploads_are_not_retried_or_redirected() {
+    let server = MockServer::start().await;
+    let directory = test_directory();
+    let file = directory.join("bird.wav");
+    std::fs::write(&file, b"audio").unwrap();
+    Mock::given(method("POST"))
+        .and(path("/api/v1/bird-identification/audio/identify"))
+        .respond_with(ResponseTemplate::new(302).insert_header("Location", "/private-redirect"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let error = with_token(&server)
+        .call("identify_audio", json!({"file":file}))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("302"));
+    assert!(!error.contains("private-test-token"));
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
+struct AdmissionResponder {
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+    failures: usize,
+    status: u16,
+    accepted: bool,
+    delay: &'static str,
+}
+impl wiremock::Respond for AdmissionResponder {
+    fn respond(&self, _: &wiremock::Request) -> ResponseTemplate {
+        let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if call >= self.failures {
+            return ResponseTemplate::new(200).set_body_json(json!({"candidates":[]}));
+        }
+        let response = ResponseTemplate::new(self.status)
+            .insert_header("Retry-After", self.delay)
+            .set_body_json(json!({"detail":"private-server-message"}));
+        if self.accepted {
+            response.insert_header("X-Bulbul-Request-Accepted", "false")
+        } else {
+            response
+        }
+    }
+}
+
+#[tokio::test]
+async fn admission_rejection_retries_with_same_file_and_respects_retry_after() {
+    let server = MockServer::start().await;
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    Mock::given(method("POST"))
+        .and(path("/api/v1/bird-identification/audio/identify"))
+        .respond_with(AdmissionResponder {
+            calls: Arc::clone(&calls),
+            failures: 1,
+            status: 429,
+            accepted: true,
+            delay: "1",
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+    let directory = test_directory();
+    let file = directory.join("bird.wav");
+    std::fs::write(&file, b"same-file-content").unwrap();
+    let started = std::time::Instant::now();
+    assert!(
+        with_token(&server)
+            .call("identify_audio", json!({"file":file, "end_seconds":3}))
+            .await
+            .is_ok()
+    );
+    assert!(started.elapsed() >= std::time::Duration::from_secs(1));
+    for request in server.received_requests().await.unwrap() {
+        assert!(String::from_utf8_lossy(&request.body).contains("same-file-content"));
+        assert_eq!(
+            request
+                .url
+                .query_pairs()
+                .find(|(k, _)| k == "end_seconds")
+                .unwrap()
+                .1,
+            "3"
+        );
+    }
+}
+
+#[tokio::test]
+async fn admission_retry_stops_after_two_retries() {
+    let server = MockServer::start().await;
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    Mock::given(method("POST"))
+        .and(path("/api/v1/bird-identification/identify"))
+        .respond_with(AdmissionResponder {
+            calls: Arc::clone(&calls),
+            failures: usize::MAX,
+            status: 429,
+            accepted: true,
+            delay: "0",
+        })
+        .expect(3)
+        .mount(&server)
+        .await;
+    let directory = test_directory();
+    let file = directory.join("bird.jpg");
+    std::fs::write(&file, b"image").unwrap();
+    assert!(
+        with_token(&server)
+            .call("identify_photo", json!({"file":file}))
+            .await
+            .is_err()
+    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn uncertain_failures_invalid_delays_and_long_rate_limits_do_not_reupload() {
+    for (status, accepted, delay) in [
+        (429, false, "0"),
+        (503, true, "0"),
+        (504, true, "0"),
+        (429, true, "bad"),
+        (429, true, "300"),
+    ] {
+        let server = MockServer::start().await;
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        Mock::given(method("POST"))
+            .and(path("/api/v1/bird-identification/audio/identify"))
+            .respond_with(AdmissionResponder {
+                calls: Arc::clone(&calls),
+                failures: usize::MAX,
+                status,
+                accepted,
+                delay,
+            })
+            .expect(1)
+            .mount(&server)
+            .await;
+        let directory = test_directory();
+        let file = directory.join("bird.wav");
+        std::fs::write(&file, b"audio").unwrap();
+        let error = with_token(&server)
+            .call("identify_audio", json!({"file":file}))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(!error.contains("private-server-message"));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+}

@@ -1,6 +1,6 @@
 # Bulbul Skills
 
-在 Codex、Claude Code 和 pi 中使用 Bulbul 的鸟种、地点预测、观鸟热点、百科、清单和练习数据，准备行程和学习识别鸟类。
+在 Codex、Claude Code 和 pi 中使用 Bulbul 的鸟种、地点预测、观鸟热点、百科、清单和练习数据，准备行程、学习识别鸟类，也可以上传照片和鸟声文件进行识别。
 
 ## 让 AI agent 安装
 
@@ -38,6 +38,27 @@ npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 登录通过 Bulbul 网页完成，凭据保存在系统凭据库。工具使用普通用户的权限和额度。Skill 通过命令行查询和更新观鸟数据。
 
 完整的登录、更新和使用方式见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-skills/releases)。
+
+## 照片和鸟声识别
+
+登录后使用 `identify_photo` 或 `identify_audio`，文件上传到 Bulbul 云端完成识别和地点日期校准。普通用户无需下载模型或配置新环境变量。应用继续使用现有本地推理。
+
+```bash
+bulbul list identify_audio
+bulbul call identify_audio --arguments-file /absolute/path/audio.json
+```
+
+参数文件示例：
+
+```json
+{"file":"/absolute/path/bird.wav","latitude":39.9,"longitude":116.4,"captured_at":"2026-10-14"}
+```
+
+照片最多 20 MB；声音完整文件最多 50 MB、0.5–300 秒，选区不能绕过完整文件的时长限制。可以传入 `start_seconds`、`end_seconds` 只分析选区。完整地点和日期用于 Geomodel，缺少这些信息时使用提供的地区或显示未校准。结果包括原始分数、校准排序、分布异常提示和声音时间片段。支持格式与具体参数见工具 schema 和 [SKILL.md](SKILL.md)。
+
+这两个工具需要支持云端识别的服务端和对应新版本 CLI；旧版 v0.39.0 程序尚不包含它们。准备发布前可以从源码构建验证。
+
+请求繁忙时先进入短队列，队列已满或等待超时会提示稍后重试。CLI 仅对明确未受理的 429 按 Retry-After 最多重试 2 次，重试前累计自动等待最多 20 秒；超时或网络失败不会自动重新上传。超过 5 分钟的录音先截取或拆分文件，普通用户无需配置队列或模型参数。
 
 ## 开发与发布
 

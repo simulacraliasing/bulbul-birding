@@ -1,6 +1,9 @@
 use crate::{
     Result, ToolError,
-    account::{Account, CredentialStore, Environment, OsCredentialStore, http_json},
+    account::{
+        Account, CredentialStore, Environment, OsCredentialStore, http_json,
+        read_json_response_with_overload_retry,
+    },
 };
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use reqwest::{Client, Method, redirect::Policy};
@@ -28,8 +31,18 @@ pub struct ToolSpec {
     pub body_keys: Vec<String>,
     #[serde(default)]
     pub has_body: bool,
+    #[serde(default)]
+    pub file_key: Option<String>,
+    #[serde(default)]
+    pub max_file_bytes: u64,
+    #[serde(default = "default_timeout")]
+    pub timeout_seconds: u64,
     pub result_limit: Option<String>,
     pub input_schema: Value,
+}
+
+fn default_timeout() -> u64 {
+    90
 }
 
 // These immutable definitions are embedded in the binary, independent of cwd.
@@ -182,6 +195,41 @@ impl BulbulClient {
             .iter()
             .map(|(key, value)| (key.clone(), scalar(value)))
             .collect::<Vec<_>>();
+        if let Some(file_key) = &tool.file_key {
+            let local_path = values[file_key]
+                .as_str()
+                .ok_or_else(|| ToolError::new("请提供本地文件路径。"))?;
+            let bytes = read_upload(local_path, tool.max_file_bytes)?;
+            let mime = if name == "identify_photo" {
+                "image/jpeg"
+            } else {
+                "application/octet-stream"
+            };
+            // Only a neutral filename is transmitted; the local path stays on this machine.
+            return read_json_response_with_overload_retry(|| {
+                // Rebuild multipart from the same file bytes; retrying cannot read a changed file.
+                let form = reqwest::multipart::Form::new().part(
+                    "file",
+                    reqwest::multipart::Part::bytes(bytes.clone())
+                        .file_name(if name == "identify_photo" {
+                            "bird.jpg"
+                        } else {
+                            "bird.audio"
+                        })
+                        .mime_str(mime)
+                        .map_err(|_| ToolError::new("无法准备上传文件。"))?,
+                );
+                Ok(self
+                    .account
+                    .http
+                    .request(method.clone(), format!("{}{path}", self.account.api_url))
+                    .query(&params)
+                    .bearer_auth(&token)
+                    .multipart(form)
+                    .timeout(Duration::from_secs(tool.timeout_seconds)))
+            })
+            .await;
+        }
         let result = http_json(
             &self.account.http,
             method,
@@ -253,6 +301,33 @@ impl BulbulClient {
         }).take(limit).collect::<Vec<_>>();
         Ok(json!({"source":"tianditu","query":query,"candidates":candidates}))
     }
+}
+
+fn read_upload(path: &str, limit: u64) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let info = std::fs::metadata(path).map_err(|_| ToolError::new("无法读取本地文件信息。"))?;
+    if !info.is_file() {
+        return Err(ToolError::new("请提供普通文件路径。"));
+    }
+    let file = std::fs::File::open(path)
+        .map_err(|_| ToolError::new("无法读取本地文件，请检查路径和访问权限。"))?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| ToolError::new("无法读取本地文件信息。"))?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > limit {
+        return Err(ToolError::new(format!(
+            "请提供不超过 {} MB 的普通文件。",
+            limit / 1024 / 1024
+        )));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ToolError::new("读取本地文件失败。"))?;
+    if bytes.is_empty() || bytes.len() as u64 > limit {
+        return Err(ToolError::new("文件为空或超过上传大小限制。"));
+    }
+    Ok(bytes)
 }
 
 fn scalar(value: &Value) -> String {

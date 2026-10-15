@@ -1,5 +1,297 @@
 [
   {
+    "file_key": "file",
+    "max_file_bytes": 20971520,
+    "timeout_seconds": 90,
+    "name": "identify_photo",
+    "description": "上传本地鸟类照片，使用云端 Geomodel 按拍摄地点和日期校准",
+    "method": "POST",
+    "path": "/bird-identification/identify",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "topk",
+      "area_id",
+      "manual_bbox",
+      "latitude",
+      "longitude",
+      "captured_at",
+      "cloud_calibration"
+    ],
+    "body_keys": [],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "topk": {
+          "default": 5,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Topk",
+          "type": "integer"
+        },
+        "area_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Area Id"
+        },
+        "manual_bbox": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Manual Bbox"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latitude"
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Longitude"
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Captured At"
+        },
+        "cloud_calibration": {
+          "type": "boolean",
+          "const": true,
+          "default": true
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "需要上传的本地文件绝对路径；不支持远程 URL"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "file_key": "file",
+    "max_file_bytes": 52428800,
+    "timeout_seconds": 230,
+    "name": "identify_audio",
+    "description": "上传本地鸟声文件，使用云端 BirdNET 与 Geomodel 识别并返回时间片段",
+    "method": "POST",
+    "path": "/bird-identification/audio/identify",
+    "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "window_seconds",
+      "hop_seconds",
+      "sensitivity",
+      "confirmation_mode",
+      "low_frequency_filter",
+      "calibration_enabled",
+      "topk",
+      "start_seconds",
+      "end_seconds",
+      "latitude",
+      "longitude",
+      "captured_at",
+      "area_id"
+    ],
+    "body_keys": [],
+    "has_body": true,
+    "result_limit": null,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "window_seconds": {
+          "default": 3,
+          "enum": [
+            1,
+            3,
+            5,
+            7,
+            10,
+            15
+          ],
+          "title": "Window Seconds",
+          "type": "integer"
+        },
+        "hop_seconds": {
+          "default": 1.5,
+          "enum": [
+            0.5,
+            1.0,
+            1.5,
+            3.0
+          ],
+          "title": "Hop Seconds",
+          "type": "number"
+        },
+        "sensitivity": {
+          "default": "balanced",
+          "enum": [
+            "low",
+            "balanced",
+            "high"
+          ],
+          "title": "Sensitivity",
+          "type": "string"
+        },
+        "confirmation_mode": {
+          "default": "confirmed",
+          "enum": [
+            "confirmed",
+            "instant"
+          ],
+          "title": "Confirmation Mode",
+          "type": "string"
+        },
+        "low_frequency_filter": {
+          "default": "off",
+          "enum": [
+            "off",
+            "light",
+            "strong"
+          ],
+          "title": "Low Frequency Filter",
+          "type": "string"
+        },
+        "calibration_enabled": {
+          "default": true,
+          "title": "Calibration Enabled",
+          "type": "boolean"
+        },
+        "topk": {
+          "default": 20,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Topk",
+          "type": "integer"
+        },
+        "start_seconds": {
+          "anyOf": [
+            {
+              "maximum": 300,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start Seconds"
+        },
+        "end_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 300,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End Seconds"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latitude"
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Longitude"
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Captured At"
+        },
+        "area_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Area Id"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "需要上传的本地文件绝对路径；声音完整文件最多 5 分钟、50 MB，选区不能绕过时长限制；不支持远程 URL"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "hotspots_nearby",
     "description": "查询附近观鸟热点",
     "method": "GET",

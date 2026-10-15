@@ -66,13 +66,24 @@ class MaintenanceTests(unittest.TestCase):
             "parameters": [{"in": "path", "name": "list_id", "required": True, "schema": {"type": "integer"}}],
             "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Input"}}}},
         }
+        for path in ["/bird-identification/identify", "/bird-identification/audio/identify"]:
+            contract["paths"][f"/api/v1{path}"]["post"] = {
+                "parameters": [{"in": "query", "name": "cloud_calibration", "schema": {"type": "boolean"}}] if path.endswith("/identify") and "/audio/" not in path else [],
+                "requestBody": {"content": {"multipart/form-data": {"schema": {"type": "object", "properties": {
+                    "file": {"type": "string", "format": "binary"}, "geographic_calibration": {"type": "string"},
+                }, "required": ["file"]}}}},
+            }
         source, output = self.root / "contract.json", self.root / "tools.json"
         source.write_text(json.dumps(contract), encoding="utf-8")
         script = ROOT / "scripts/export_birding_tools.py"
         result = self.run_script(script, "--openapi", source, "--output", output)
         self.assertEqual(result.returncode, 0, result.stderr)
         tools = {tool["name"]: tool for tool in json.loads(output.read_text(encoding="utf-8"))}
-        self.assertEqual(len(tools), 21)
+        self.assertEqual(len(tools), 23)
+        self.assertEqual(tools["identify_audio"]["max_file_bytes"], 50 * 1024 * 1024)
+        self.assertEqual(tools["identify_audio"]["input_schema"]["properties"]["file"]["type"], "string")
+        self.assertNotIn("geographic_calibration", tools["identify_photo"]["input_schema"]["properties"])
+        self.assertTrue(tools["identify_photo"]["input_schema"]["properties"]["cloud_calibration"]["const"])
         tool = tools["species_list_replace_items"]
         self.assertEqual(tool["path_keys"], ["list_id"])
         self.assertEqual(tool["body_keys"], ["taxon_ids"])
