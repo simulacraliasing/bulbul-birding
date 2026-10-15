@@ -1,49 +1,53 @@
 ---
 name: bulbul-birding
-description: 使用 Bulbul 的真实鸟种、观鸟热点、地点预测、百科、用户清单和练习数据，帮助用户准备观鸟行程、学习和练习。适用于行前预习、按目标鸟种找地点、读取最近查询、保存鸟种清单，或识别用户提供的鸟类照片和鸟声文件。
+description: 识别用户提供的鸟类照片或鸟声文件，安排观鸟行程、按目标鸟种找地点、学习鸟种，或读取最近查询、保存鸟种清单和创建练习时使用。通过 Bulbul CLI 查询真实的鸟种、热点、地点预测、百科和用户数据。
 ---
 
-# Bulbul 观鸟准备
+# Bulbul 观鸟工具
 
-使用 Bulbul 工具查询实际数据，再根据用户的地点、日期和目标鸟种整理建议。模型、会话历史和推理由当前 harness 提供。
+使用 Bulbul 的真实结果回答用户。照片和声音识别读取 [识别说明](references/recognition.md)，行程和地点推荐读取 [行程说明](references/trip-planning.md)。首次安装、登录或启动失败时读取 [接入说明](references/setup.md)。
 
-## 使用工具
+## 调用 CLI
 
-使用本 skill 目录中的命令行入口。先用 `list <工具名>` 查看参数，再用 `call <工具名>` 调用；结果以 JSON 输出。
+使用本 skill 的绝对路径。先批量查看本次需要的工具参数，按返回的 `input_schema` 调用；同一会话复用已经读过的 schema，无需每次调用前重新查询。
 
 ```bash
-bash <skill绝对路径>/scripts/bulbul.sh list species_predict
-bash <skill绝对路径>/scripts/bulbul.sh call species_predict --arguments-file <参数文件.json>
+bash <skill绝对路径>/scripts/bulbul.sh list identify_photo species_wiki
+bash <skill绝对路径>/scripts/bulbul.sh call identify_photo --arguments-file <参数文件绝对路径.json>
 ```
 
-把路径替换为本 skill 的实际目录；Windows 使用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <skill绝对路径>/scripts/bulbul.ps1`，后面接相同参数。启动脚本会按本 skill 的版本从公开仓库下载对应平台的 Rust 程序，核对 SHA-256 后运行，后续直接使用本机缓存。所有提示输出到 stderr，stdout 保留给业务 JSON。业务程序是 Rust 单文件，不需要 Python、Node.js、uv 或 Rust 编译环境，也不依赖当前工作目录。首次安装或登录时读取 [接入说明](references/setup.md)。普通用户通过浏览器登录，工具自动从系统凭据库读取账号；无需填写会话令牌。密码和令牌不放进聊天、参数文件或 Git，也不请求用户把登录响应发送给模型。
+Windows 使用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <skill绝对路径>/scripts/bulbul.ps1`，后面接相同参数。路径含空格时加引号。`list` 直接读取随 skill 分发的定义，无需下载、联网或访问凭据库。其他命令首次运行会下载并校验同版本的 Rust 程序，优先缓存在当前 Git 项目的 `.tmp/bulbul/`；不在 Git 项目时使用系统用户缓存。日常使用无需 Python、Node.js、uv 或 Rust。
 
-尚未登录或遇到 401 时，请用户在自己的终端运行上述启动脚本的 `login` 命令，按提示在浏览器确认账号。程序会自动等待授权并保存登录；可以用 `--no-browser` 在另一台设备上打开登录链接。用 `status` 查看当前账号；用户要求退出工具账号时使用 `logout`。登录、状态查询和退出都不返回令牌，不用服务令牌替代用户登录。
+参数文件使用 UTF-8 JSON object，保存在当前项目可写的临时目录。`--arguments-file` 避免不同 shell 的 JSON 引号问题。stdout 为业务 JSON，stderr 为提示或错误；需要限制输出时保留真实退出码，例如 PowerShell：
 
-参数以 `list <工具名>` 输出的 `input_schema` 为准。参数文件必须是 JSON object；命令行的 `--arguments-file` 可以避免 PowerShell、Bash 对 JSON 引号的不同处理。
+```powershell
+$result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<skill绝对路径>/scripts/bulbul.ps1" list location_search hotspots_nearby species_predict hotspots_target_destinations 2>&1
+$code = $LASTEXITCODE
+$text = $result | Out-String
+$text.Substring(0, [Math]::Min(12000, $text.Length))
+exit $code
+```
 
-## 整理观鸟建议
+输出截断时按需缩小查询或读取参数定义，不能把截断的 JSON 当作完整结果。命令失败时检查退出码和错误 JSON；422 的 `details.validation` 给出安全的字段位置和错误类型，修正参数后再调用。
 
-- 用户只给地名时，登录后直接用 `location_search` 查询候选，无需申请或配置地图 API Key。地点重名或有多个合理候选时，请用户选择；服务暂时不可用时，可使用用户提供或其他可用工具查到的坐标，不猜经纬度。天地图默认搜索范围为中国大陆，境外地点使用用户提供或其他可用工具查到的坐标。
-- 根据用户日期传入 `target_date`，格式为 `YYYY-MM-DD`；“明天”等相对日期按用户时区解释。
-- 用 `species_catalog` 把名称对齐到项目内 `taxon_id`，后续鸟种查询和清单关联都使用这个 ID。学名、中文名和外部代码用于展示或查找。
-- 地点预习用 `species_predict`，附近地点用 `hotspots_nearby`，按目标鸟种寻找目的地用 `hotspots_target_destinations`。预测会像网页一样保存当前用户的最近查询。
-- 用 `species_wiki`、`species_detail` 读取识别特征和相似种。返回 `pending` 时说明资料尚未就绪，不补造百科或分布结果。
-- 用户提到最近查询或已有清单时，使用 `saved_queries`、`species_lists`、`species_list_detail`。最近查询使用返回的 `snapshots[].id`，作为后续请求的 `snapshot_id` 或 `saved_query_id`；清单使用返回的 `list_id`。结果含 `truncated` 或分页参数时，说明覆盖范围，需要时继续读取。
-- 建议区分预测、历史记录和实际观察，不把概率当作保证能看到。保留工具返回的来源和日期，地点坐标、鸟种 ID 和清单 ID 都来自真实结果。
+## 登录与恢复
 
-## 照片和声音识别
+普通用户无需配置环境变量、地图 Key 或模型。CLI 自动读取系统凭据库中的账号。直接执行需要的查询；提示 `login_required`、`session_expired` 或 401 时，引导用户在自己的终端运行启动脚本的 `login`，在浏览器完成授权。程序自动等待并保存登录；`--no-browser` 显示可手动打开的链接。`status` 验证当前账号，`logout` 用于用户要求退出工具账号时。
 
-用户要求识别文件时，先查看 `identify_photo` 或 `identify_audio` 的 schema，传入 `file` 的本地绝对路径。文件会上传到 Bulbul 云端；无法直接访问的附件先取得可读取的本地文件。照片最多 20 MB；声音完整文件最多 50 MB、0.5–300 秒，选区不能绕过完整文件的长度限制；超过 5 分钟时先按用户需要截取或拆分。支持 WAV、FLAC、MP3、M4A（AAC/ALAC）、AIFF、Ogg Vorbis。Opus 先用可用工具转为 WAV。
+启动或凭据访问失败时先用 `doctor` 检查本机版本、站点和凭据访问；它不请求服务端、不改变登录，也不返回令牌。本机有会话不代表服务端仍有效。当前进程被拒绝访问凭据库时，让用户在自己的终端运行同一命令对照；终端正常则检查 harness 权限，不把沙箱限制解释成没有安装凭据管理器。
 
-已知拍摄或录音地点、日期时传入 `latitude`、`longitude`、`captured_at`（YYYY-MM-DD），云端按这些信息运行 Geomodel。缺少信息时询问用户或使用已有地区；不要猜位置、使用今天代替录音日期，或自行计算校准权重。没有完整地点日期时返回地区校准或未校准结果，说明实际状态。应用仍使用自己的本地模型，CLI 不下载模型。
+缓存不可写时使用项目内可写目录，必要时按接入说明指定缓存位置；访问权限仍由 harness 决定。密码和令牌不放进聊天、参数文件或 Git，不请求用户回传登录响应，不用服务令牌或明文文件代替系统凭据库。
 
-声音默认与应用相同：3 秒窗口、1.5 秒步长、标准灵敏度、连续确认、高通关闭。返回的 `score` 是原始分数，`rank_score` 用于排序；保留 `distribution_mismatch` 提示和时间片段，不把候选当作已确认观察。机器结果按校准分数排序；应用界面的“最近出现”只改变显示顺序。需要调查相似种时用返回的 `taxon_id` 查询百科。CLI 仅对明确未受理、带 Retry-After 的 429 最多自动重试 2 次，重试前累计自动等待最多 20 秒。仍繁忙时按提示等待，不再由 Agent 连续重试；网络错误、超时和其他失败不自动重新上传。录音超过 5 分钟时需要截取或拆分文件，单纯指定选区不能绕过上限。
+## 数据依据
+
+鸟种名称用 `species_catalog` 对齐到项目内 `taxon_id`，后续鸟种查询和清单关联使用这个 ID。坐标、鸟种 ID、查询 ID 和清单 ID 来自实际结果。区分预测、历史记录和实际观察；保留来源、日期和校准状态，不把分数当作保证能看到或已确认识别。
+
+最近查询使用 `saved_queries` 返回的 `snapshots[].id`，作为 `snapshot_id` 或 `saved_query_id`；已有清单使用 `species_lists`、`species_list_detail` 返回的 `list_id`。结果含 `truncated` 或分页时说明覆盖范围，按需求继续读取。百科返回 `pending` 时说明资料尚未就绪，不补造百科或分布结果。
 
 ## 清单和练习
 
-`quiz_route_book_create`、`quiz_custom_batch_create` 和 `species_list_*` 写入工具默认返回 `confirmation_required` 及操作参数，不执行请求。
+`quiz_route_book_create`、`quiz_custom_batch_create` 和 `species_list_*` 写入工具默认返回 `confirmation_required` 及具体操作参数，不执行请求。
 
-用户已经明确要求创建练习、保存清单或替换指定清单时，沿用已有授权，用相同参数加 `confirm: true` 执行；命令行也可以使用 `--confirm`。只有目标清单、内容或覆盖范围尚不清楚时，才先展示具体方案并确认。仅询问推荐或预习建议不表示授权替换清单。
+用户已经明确要求创建练习、保存清单或替换指定清单时，沿用授权，用相同参数加 `confirm: true` 或 CLI 的 `--confirm` 执行。目标清单、内容或覆盖范围不清楚时，先整理具体方案再确认。仅询问推荐不表示授权替换清单。
 
-替换清单前读取 `species_list_detail`，说明会替换全部鸟种，保留原有 taxon_ids 以便按需恢复。创建后使用返回的 ID，并根据需要再读取清单确认内容。写入请求失败或超时后先检查是否已完成，不自动重试。当前用户的权限、额度和数据归属由 Bulbul API 校验。
+替换前读取完整清单（包括分页），说明会替换全部鸟种，保留原有 `taxon_ids` 便于恢复。创建后使用返回的 ID，按需读取确认。写入失败或超时后先检查是否已完成，不自动重试。用户权限、额度和数据归属由 Bulbul API 校验。

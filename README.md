@@ -20,7 +20,8 @@ npx --yes skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g -a
 没有 Node.js 时，按接入说明用 Git 克隆到当前工具的 skill 目录。
 如果已经安装，确认来源是这个仓库后按原安装方式更新；同名目录来自其他来源时先说明情况，保留已有文件。
 
-安装后读取 SKILL.md，通过 CLI 使用观鸟工具，运行该目录的启动脚本，用 --version 和 list 验证程序下载、校验及工具发现是否正常。无需安装 Python 或 Rust，也无需从源码编译。
+安装后读取 SKILL.md，通过 CLI 使用观鸟工具，先运行该目录启动脚本的 list（可批量查看参数，无需下载或登录），再用 --version 验证程序下载和校验。无需安装 Python 或 Rust，也无需从源码编译。
+如果启动或凭据访问失败，按接入说明使用项目内可写缓存或 doctor 诊断，不要求我提供 API Key 或令牌；不要修改其他 skills 和 AI 工具的全局设置。
 最后告诉我实际安装目录、程序版本和在当前工具中如何使用；如果需要重新加载或重启，请说明。
 后续查询需要账号时，引导我在 Bulbul 浏览器页面完成登录。
 ```
@@ -35,9 +36,13 @@ npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 
 首次调用时，skill 的启动脚本会从本仓库的 GitHub Releases 下载对应平台的 Rust 程序，校验 SHA-256 后保存到本机。日常使用不需要 Node.js、Python 或 Rust，也不需要手动填写令牌。支持 Windows x64、macOS Intel / Apple Silicon、Linux x64 / ARM64。
 
+`list` 可一次查看多个工具的参数，直接读取随 skill 分发的定义，不需要下载、联网或登录。运行其他命令时，程序优先缓存在当前 Git 项目的 `.tmp/bulbul/`，项目外使用系统用户缓存，不写入 skill 安装目录。
+
 登录通过 Bulbul 网页完成，凭据保存在系统凭据库。工具使用普通用户的权限和额度。Skill 通过命令行查询和更新观鸟数据。
 
 完整的登录、更新和使用方式见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-skills/releases)。
+
+遇到登录或权限问题，可以用 `doctor` 检查本机。它不请求服务端、不改变登录、不输出令牌；本机有会话时，再用 `status` 验证账号。AI 工具中失败、自己的终端正常时，检查 AI 工具的执行权限。
 
 ## 按地名找地点
 
@@ -48,7 +53,7 @@ npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 登录后使用 `identify_photo` 或 `identify_audio`，文件上传到 Bulbul 云端完成识别和地点日期校准。普通用户无需下载模型或配置新环境变量。应用继续使用现有本地推理。
 
 ```bash
-bulbul list identify_audio
+bulbul list identify_photo identify_audio species_wiki
 bulbul call identify_audio --arguments-file /absolute/path/audio.json
 ```
 
@@ -84,7 +89,7 @@ uv venv .venv
 .venv/bin/python scripts/manage_version.py check
 .venv/bin/python scripts/manage_version.py sync
 # 准备客户端发版时才更新版本
-.venv/bin/python scripts/manage_version.py set 0.40.0
+.venv/bin/python scripts/manage_version.py set 0.41.0
 .venv/bin/python tests/test_maintenance.py
 ```
 
@@ -97,6 +102,6 @@ uv venv .venv
 .venv/bin/python scripts/export_birding_tools.py --openapi /path/to/public-v1.json --check
 ```
 
-审阅 `assets/tools.json` 的变化，再运行 Rust 测试和构建。添加工具时在 `scripts/export_birding_tools.py` 的明确列表中选择公开业务接口，并更新 skill 说明和行为测试。业务 API、浏览器授权页面、服务端鉴权及数据库仍由 Bulbul 项目维护。
+审阅 `assets/tools.json` 和同源生成的 `assets/tools.jsonl`，再运行 Rust 测试和构建。前者编译到 native CLI，后者供启动脚本离线查看参数；维护测试核对两者一致。添加工具时在 `scripts/export_birding_tools.py` 的明确列表中选择公开业务接口，并更新 skill 说明和行为测试。业务 API、浏览器授权页面、服务端鉴权及数据库仍由 Bulbul 项目维护。
 
 `tests/test_maintenance.py` 不需要服务端目录；启动脚本测试需要先编译程序，并通过 `BULBUL_TEST_BINARY` 指定程序路径。CI 在五个平台运行维护脚本、Rust 和启动脚本测试。
