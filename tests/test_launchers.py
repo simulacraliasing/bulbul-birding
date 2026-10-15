@@ -43,6 +43,7 @@ class Install:
             (self.root / name).mkdir(parents=True)
         for name in ("bulbul.sh", "bulbul.ps1"):
             shutil.copyfile(SKILL / "scripts" / name, self.root / "scripts" / name)
+        shutil.copyfile(SKILL / "assets/tools.jsonl", self.root / "assets/tools.jsonl")
         (self.root / "assets/runtime.json").write_text(
             json.dumps({**RUNTIME, "version": version}, indent=2), encoding="utf-8"
         )
@@ -55,12 +56,15 @@ class Install:
             encoding="utf-8",
         )
         self.log = self.root / "requests.txt"
-        self.cache = self.root / "bin" / version / TARGET / f"bulbul{SUFFIX}"
+        self.cache_root = self.root / "runtime-cache"
+        self.cache = self.cache_root / version / TARGET / f"bulbul{SUFFIX}"
+        self.cwd = self.root
         self.env = {
             key: value for key, value in os.environ.items()
             if not key.startswith("BULBUL_")
         }
         self.env.update({
+            "BULBUL_CACHE_DIR": self.cache_root.as_posix(),
             "BULBUL_TEST_RELEASE_DIR": (self.root / "release").as_posix(),
             "BULBUL_TEST_REQUEST_LOG": self.log.as_posix(),
         })
@@ -91,10 +95,7 @@ class Install:
             "  $name = ([uri]$Uri).Segments[-1]\n"
             "  Copy-Item -LiteralPath (Join-Path $env:BULBUL_TEST_RELEASE_DIR $name) -Destination $OutFile\n"
             "}\n"
-            "try { $binary = Get-BulbulBinary } catch {\n"
-            "  [Console]::Error.WriteLine($_.Exception.Message); exit 1\n"
-            "}\n"
-            "& $binary @args\nexit $LASTEXITCODE\n",
+            "exit (Invoke-Bulbul -CliArgs @($args))\n",
             encoding="utf-8-sig",
         )
 
@@ -109,7 +110,7 @@ class Install:
 
     def run(self, *args, mock=True):
         return subprocess.run(
-            self.command(*args, mock=mock), env=self.env, cwd=self.root,
+            self.command(*args, mock=mock), env=self.env, cwd=self.cwd,
             capture_output=True, text=True, encoding="utf-8", timeout=45,
         )
 
@@ -122,10 +123,9 @@ class LauncherTests(unittest.TestCase):
         for flavor in FLAVORS:
             with self.subTest(flavor=flavor):
                 install = Install(flavor)
-                first = install.run("list", "species_catalog")
+                first = install.run("--version")
                 self.assertEqual(first.returncode, 0, first.stderr)
-                self.assertIn("species_catalog", first.stdout)
-                json.loads(first.stdout)
+                self.assertEqual(first.stdout.strip(), f"bulbul {VERSION}")
                 self.assertIn("preparing version", first.stderr)
                 self.assertEqual(len(install.requests()), 2)
                 for url in install.requests():
@@ -135,6 +135,88 @@ class LauncherTests(unittest.TestCase):
                 self.assertEqual(cached.stdout.strip(), f"bulbul {VERSION}")
                 self.assertEqual(cached.stderr, "")
                 self.assertEqual(len(install.requests()), 2)
+
+    def test_schema_discovery_needs_no_binary_network_credentials_or_writable_cache(self):
+        for flavor in FLAVORS:
+            with self.subTest(flavor=flavor):
+                install = Install(flavor)
+                blocked = install.root / "blocked-cache"
+                blocked.write_text("not a directory", encoding="utf-8")
+                install.env["BULBUL_CACHE_DIR"] = str(blocked)
+                install.env["BULBUL_API_URL"] = "private-invalid-url"
+                install.env["BULBUL_SESSION_TOKEN"] = "private-token"
+                names = ["identify_photo", "species_wiki", "location_search"]
+                distributed = [*install.root.joinpath("scripts").iterdir(), *install.root.joinpath("assets").iterdir()]
+                before = {str(file): file.read_bytes() for file in distributed}
+                result = install.run("list", *names)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                native = subprocess.run([str(BINARY), "list", *names], env=install.env, capture_output=True, check=True)
+                self.assertEqual(json.loads(result.stdout), json.loads(native.stdout))
+                all_tools = install.run("list")
+                self.assertEqual(all_tools.returncode, 0, all_tools.stderr)
+                self.assertEqual(len(json.loads(all_tools.stdout)), 23)
+                for unknown, code in [("private-unknown", 2), ("not_a_tool", 1)]:
+                    result = install.run("list", "species_wiki", unknown)
+                    self.assertEqual(result.returncode, code, result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertNotIn(unknown, result.stderr)
+                    json.loads(result.stderr)
+                self.assertEqual(install.requests(), [])
+                self.assertFalse(install.cache_root.exists())
+                self.assertEqual(before, {str(file): file.read_bytes() for file in distributed})
+
+    def test_default_cache_uses_git_project_and_preserves_skill_files(self):
+        for flavor in FLAVORS:
+            with self.subTest(flavor=flavor):
+                install = Install(flavor)
+                project = install.root.with_name("project " + uuid.uuid4().hex)
+                project.mkdir()
+                (project / ".git").write_text("gitdir: test-marker", encoding="utf-8")
+                install.cwd = project
+                install.env.pop("BULBUL_CACHE_DIR")
+                install.log = project / "requests.txt"
+                install.env["BULBUL_TEST_REQUEST_LOG"] = install.log.as_posix()
+                distributed = [*install.root.joinpath("scripts").iterdir(), *install.root.joinpath("assets").iterdir()]
+                before = {str(file): file.read_bytes() for file in distributed}
+                if not WINDOWS:
+                    install.root.chmod(0o555)
+                    self.addCleanup(install.root.chmod, 0o755)
+                result = install.run("--version")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue((project / ".tmp/bulbul" / VERSION / TARGET / f"bulbul{SUFFIX}").is_file())
+                self.assertFalse((install.root / "bin").exists())
+                self.assertEqual(before, {str(file): file.read_bytes() for file in distributed})
+                self.assertEqual(install.run("--version", mock=False).returncode, 0)
+                self.assertEqual(len(install.requests()), 2)
+
+    def test_cache_error_explains_recovery_before_any_download(self):
+        for flavor in FLAVORS:
+            with self.subTest(flavor=flavor):
+                install = Install(flavor)
+                blocked = install.root / "blocked-cache"
+                blocked.write_text("not a directory", encoding="utf-8")
+                install.env["BULBUL_CACHE_DIR"] = str(blocked)
+                result = install.run("--version")
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("BULBUL_CACHE_DIR", result.stderr)
+                self.assertEqual(install.requests(), [])
+
+    def test_old_verified_cache_is_a_read_only_fallback(self):
+        for flavor in FLAVORS:
+            with self.subTest(flavor=flavor):
+                install = Install(flavor)
+                old = install.root / "bin" / VERSION / TARGET / f"bulbul{SUFFIX}"
+                old.parent.mkdir(parents=True)
+                shutil.copyfile(BINARY, old)
+                old.chmod(0o755)
+                shutil.copyfile(install.checksum, old.with_suffix(old.suffix + ".sha256"))
+                before = old.stat().st_mtime_ns
+                result = install.run("--version")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(install.requests(), [])
+                self.assertFalse(install.cache_root.exists())
+                self.assertEqual(old.stat().st_mtime_ns, before)
 
     def test_checksum_mismatch_is_rejected_before_execution(self):
         for flavor in FLAVORS:
@@ -166,7 +248,7 @@ class LauncherTests(unittest.TestCase):
                 result = install.run("--version")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(len(install.requests()), 4)
-                self.assertEqual(hashlib.sha256(install.cache.read_bytes()).digest(), hashlib.sha256(BINARY.read_bytes()).digest())
+                self.assertEqual(hashlib.sha256(install.cache.read_bytes()).digest(), hashlib.sha256(install.download.read_bytes()).digest())
 
     def test_arguments_file_with_spaces_and_exit_codes(self):
         for flavor in FLAVORS:

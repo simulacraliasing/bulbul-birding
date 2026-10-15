@@ -34,10 +34,12 @@ enum Commands {
     },
     /// 查看当前登录账号
     Status,
+    /// 仅检查本机版本、站点和凭据访问，不请求服务端或改变登录
+    Doctor,
     /// 撤销工具会话并删除本机凭据
     Logout,
     /// 查看可用工具和参数 schema
-    List { tool: Option<String> },
+    List { tools: Vec<String> },
     /// 调用工具，结果输出为 JSON
     Call {
         tool: String,
@@ -55,7 +57,8 @@ enum Commands {
 
 async fn run(cli: Cli) -> Result<Value> {
     match cli.command {
-        Commands::List { tool } => list_tools(tool.as_deref()),
+        Commands::List { tools } => list_tools(&tools),
+        Commands::Doctor => Ok(BulbulClient::from_environment(None)?.account.doctor()),
         Commands::Login {
             api_url,
             no_browser,
@@ -116,7 +119,7 @@ async fn main() -> ExitCode {
         Err(_) => {
             eprintln!(
                 "{}",
-                json!({"error":"命令参数无效，请运行 bulbul --help 查看用法。"})
+                json!({"error":"命令参数无效，请运行 bulbul --help 查看用法。", "code":"invalid_arguments"})
             );
             return ExitCode::from(2);
         }
@@ -127,7 +130,7 @@ async fn main() -> ExitCode {
                 if writeln!(io::stdout().lock(), "{value}").is_err() { return ExitCode::from(1); }
                 ExitCode::SUCCESS
             }
-            Err(error) => { eprintln!("{}", json!({"error":error.to_string()})); ExitCode::from(1) }
+            Err(error) => { eprintln!("{}", error.as_json()); ExitCode::from(1) }
         },
         _ = tokio::signal::ctrl_c() => { eprintln!("{}", json!({"status":"cancelled", "message":"已取消登录或操作。"})); ExitCode::from(130) }
     }

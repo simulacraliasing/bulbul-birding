@@ -1,6 +1,6 @@
 use bulbul_birding::{
     Result, ToolError,
-    account::{CredentialStore, Environment, Session, normalize_api_url},
+    account::{CredentialStore, Environment, Session, normalize_api_url, read_json_response},
     client::{BulbulClient, TOOLS},
 };
 use serde_json::{Value, json};
@@ -44,6 +44,12 @@ impl CredentialStore for MemoryStore {
         }
     }
     fn read(&self, url: &str) -> Result<Option<Session>> {
+        if self.unavailable {
+            return Err(ToolError::coded(
+                "credential_access_denied",
+                "当前进程无法访问系统凭据库",
+            ));
+        }
         Ok(self.sessions.lock().unwrap().get(url).map(|token| Session {
             session_token: token.clone(),
             expires_at: None,
@@ -600,6 +606,187 @@ fn cli_reads_bom_files_and_never_echoes_bad_json_or_command_arguments() {
         serde_json::from_slice::<Value>(&output.stdout).unwrap()[0]["name"],
         "species_wiki"
     );
+    let output = run(&["list", "species_wiki", "identify_photo"]);
+    assert!(output.status.success());
+    let tools: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(tools[0]["name"], "species_wiki");
+    assert_eq!(tools[1]["name"], "identify_photo");
+    let output = run(&["list", "species_wiki", "private-invalid-name"]);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("private-invalid-name"));
+}
+
+#[tokio::test]
+async fn query_arrays_send_repeated_ids_while_json_body_arrays_stay_arrays() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/hotspots/target-destinations"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"items":[]})))
+        .expect(3)
+        .mount(&server)
+        .await;
+    let client = with_token(&server);
+    for ids in [vec![42, 73, 42], vec![42], vec![]] {
+        client
+            .call(
+                "hotspots_target_destinations",
+                json!({"target_date":"2026-10-16", "taxon_id":ids, "species_list_id":null}),
+            )
+            .await
+            .unwrap();
+        let requests = server.received_requests().await.unwrap();
+        let request = requests.last().unwrap();
+        let actual: Vec<String> = request
+            .url
+            .query_pairs()
+            .filter(|(key, _)| key == "taxon_id")
+            .map(|(_, v)| v.into_owned())
+            .collect();
+        assert_eq!(actual, ids.iter().map(i32::to_string).collect::<Vec<_>>());
+        assert!(
+            !request
+                .url
+                .query_pairs()
+                .any(|(key, _)| key == "species_list_id")
+        );
+    }
+    Mock::given(method("POST"))
+        .and(path("/api/v1/species/42/detail"))
+        .and(body_json(
+            json!({"prediction_taxon_ids":[42,73], "compare_limit":3}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    client
+        .call(
+            "species_detail",
+            json!({"taxon_id":42, "prediction_taxon_ids":[42,73]}),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn validation_errors_expose_only_safe_fields_and_types() {
+    let server = MockServer::start().await;
+    Mock::given(path("/api/v1/hotspots/target-destinations"))
+        .respond_with(ResponseTemplate::new(422).set_body_json(json!({"detail":[
+            {"loc":["query","taxon_id",0], "type":"int_parsing", "msg":"private-token", "input":"private-input", "ctx":{"value":"private-secret"}},
+            {"loc":["body","private-field"], "type":"private-type", "msg":"private-message"}
+        ]}))).expect(1).mount(&server).await;
+    let error = with_token(&server)
+        .call(
+            "hotspots_target_destinations",
+            json!({"target_date":"2026-10-16","taxon_id":[42]}),
+        )
+        .await
+        .unwrap_err()
+        .as_json();
+    assert_eq!(error["code"], "invalid_arguments");
+    assert_eq!(error["details"]["http_status"], 422);
+    assert_eq!(
+        error["details"]["validation"][0],
+        json!({"field":["query","taxon_id",0],"type":"integer"})
+    );
+    assert_eq!(
+        error["details"]["validation"][1],
+        json!({"field":["body","field"],"type":"validation_error"})
+    );
+    assert!(!error.to_string().contains("private-"));
+}
+
+#[tokio::test]
+async fn validation_error_bodies_are_bounded_and_invalid_json_is_safe() {
+    for body in ["private-body".to_owned(), "x".repeat(70 * 1024)] {
+        let server = MockServer::start().await;
+        Mock::given(path("/api/v1/locations/search"))
+            .respond_with(ResponseTemplate::new(422).set_body_string(body))
+            .mount(&server)
+            .await;
+        let error = with_token(&server)
+            .call("location_search", json!({"query":"翠湖"}))
+            .await
+            .unwrap_err()
+            .as_json();
+        assert_eq!(error["details"]["validation"], json!([]));
+        assert!(!error.to_string().contains("private-body"));
+    }
+}
+
+#[tokio::test]
+async fn network_and_timeout_errors_are_distinct_and_never_echo_request_urls() {
+    let server = MockServer::start().await;
+    Mock::given(path("/private-token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(std::time::Duration::from_millis(200))
+                .set_body_json(json!({})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let http = reqwest::Client::new();
+    let error = read_json_response(
+        http.get(format!("{}/private-token", server.uri()))
+            .timeout(std::time::Duration::from_millis(40)),
+    )
+    .await
+    .unwrap_err()
+    .as_json();
+    assert_eq!(error["code"], "request_timeout");
+    assert!(!error.to_string().contains("private-token"));
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let error = read_json_response(http.get(format!("http://127.0.0.1:{port}/private-token")))
+        .await
+        .unwrap_err()
+        .as_json();
+    assert_eq!(error["code"], "network_unavailable");
+    assert!(!error.to_string().contains("private-token"));
+}
+
+#[tokio::test]
+async fn doctor_is_local_keeps_sessions_and_distinguishes_missing_from_denied_access() {
+    let server = MockServer::start().await;
+    let store = Arc::new(MemoryStore::default());
+    let client = client(&server, store.clone());
+    assert_eq!(client.account.doctor()["session_present"], false);
+    store
+        .save(
+            &client.account.api_url,
+            &Session {
+                session_token: "private-saved-token".into(),
+                expires_at: None,
+            },
+        )
+        .unwrap();
+    let report = client.account.doctor();
+    assert_eq!(report["session_present"], true);
+    assert_eq!(report["server_session"], "not_checked");
+    assert!(!report.to_string().contains("private-saved-token"));
+    assert!(store.read(&client.account.api_url).unwrap().is_some());
+    let denied = BulbulClient::new(
+        Arc::new(MemoryStore {
+            unavailable: true,
+            ..Default::default()
+        }),
+        Environment::default(),
+        Some(&server.uri()),
+    )
+    .unwrap()
+    .account
+    .doctor();
+    assert_eq!(denied["credential_store"], "access_denied");
+    assert!(denied["session_present"].is_null());
+    let env = with_token(&server).account.doctor();
+    assert_eq!(env["session_source"], "environment");
+    assert_eq!(env["credential_store"], "not_checked");
+    assert!(!env.to_string().contains("private-test-token"));
+    assert!(server.received_requests().await.unwrap().is_empty());
 }
 
 #[tokio::test]

@@ -1,4 +1,4 @@
-# This launcher only prepares the native executable and forwards its arguments.
+﻿# Schema discovery is local; other commands prepare and run the native executable.
 # Keep all bootstrap messages on stderr so stdout contains only CLI results.
 Import-Module Microsoft.PowerShell.Utility
 Set-StrictMode -Version 3.0
@@ -7,6 +7,44 @@ $utf8 = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = $utf8
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8
+
+function Get-BulbulCacheRoot {
+    if ($env:BULBUL_CACHE_DIR) { return [IO.Path]::GetFullPath($env:BULBUL_CACHE_DIR) }
+    $directory = (Get-Location).Path
+    while ($directory) {
+        if (Test-Path -LiteralPath (Join-Path $directory '.git')) { return Join-Path $directory '.tmp/bulbul' }
+        $parent = Split-Path -Parent $directory
+        if ($parent -eq $directory) { break }
+        $directory = $parent
+    }
+    if (-not $env:LOCALAPPDATA) { throw '无法找到缓存目录。请在可写的项目目录运行，或设置 BULBUL_CACHE_DIR。' }
+    return Join-Path $env:LOCALAPPDATA 'bulbul-birding/cache'
+}
+
+function Show-BulbulTools {
+    param([string[]]$Names)
+    if ($Names -contains '--help' -or $Names -contains '-h') {
+        [Console]::Out.WriteLine('Usage: bulbul list [TOOL ...]'); return 0
+    }
+    if (@($Names | Where-Object { $_ -notmatch '^[a-z][a-z0-9_]*$' }).Count -gt 0) {
+        [Console]::Error.WriteLine('{"error":"命令参数无效，请运行 bulbul list --help 查看用法。","code":"invalid_arguments"}'); return 2
+    }
+    $skillDir = Split-Path -Parent $PSScriptRoot
+    $tools = @(Get-Content -LiteralPath (Join-Path $skillDir 'assets/tools.jsonl') -Encoding UTF8 | ForEach-Object { ConvertFrom-Json -InputObject $_ })
+    $selected = @($tools)
+    if ($Names.Count -gt 0) {
+        $selected = @()
+        foreach ($name in $Names) {
+            $tool = @($tools | Where-Object { $_.name -eq $name })
+            if ($tool.Count -ne 1) {
+                [Console]::Error.WriteLine('{"error":"没有这个 Bulbul 工具，请运行 list 查看可用工具。","code":"operation_failed"}'); return 1
+            }
+            $selected += $tool[0]
+        }
+    }
+    [Console]::Out.WriteLine((ConvertTo-Json -InputObject @($selected) -Depth 100 -Compress))
+    return 0
+}
 
 function Get-BulbulBinary {
     $skillDir = Split-Path -Parent $PSScriptRoot
@@ -26,23 +64,33 @@ function Get-BulbulBinary {
     }
 
     $asset = "bulbul-$version-$target.exe"
-    $cacheDir = Join-Path $skillDir "bin/$version/$target"
+    $cacheDir = Join-Path (Get-BulbulCacheRoot) "$version/$target"
     $binary = Join-Path $cacheDir 'bulbul.exe'
     $hashPattern = '^([0-9a-fA-F]{64})  ' + [regex]::Escape($asset) + '\r?\n?$'
-    if ((Test-Path -LiteralPath $binary -PathType Leaf) -and (Test-Path -LiteralPath "$binary.sha256" -PathType Leaf)) {
-        $checksum = Get-Content -LiteralPath "$binary.sha256" -Raw
+    foreach ($candidate in @($binary, (Join-Path $skillDir "bin/$version/$target/bulbul.exe"))) {
+      if ((Test-Path -LiteralPath $candidate -PathType Leaf) -and (Test-Path -LiteralPath "$candidate.sha256" -PathType Leaf)) {
+        $checksum = Get-Content -LiteralPath "$candidate.sha256" -Raw
         if ($checksum -match $hashPattern) {
             $expected = $Matches[1]
-            if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -eq $expected) {
-                $cachedVersion = & $binary --version 2>$null
+            if ((Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash -eq $expected) {
+                $cachedVersion = & $candidate --version 2>$null
                 if ($LASTEXITCODE -ne 0 -or $cachedVersion -ne "bulbul $version") { throw 'Cached executable has an unexpected version.' }
-                return $binary
+                return $candidate
             }
         }
+      }
     }
 
-    [void][IO.Directory]::CreateDirectory($cacheDir)
+    try { [void][IO.Directory]::CreateDirectory($cacheDir) } catch {
+        throw '程序缓存目录不可写。请在可写的项目目录运行，或设置 BULBUL_CACHE_DIR；AI 工具中还需允许该目录的访问。'
+    }
     $partial = Join-Path $cacheDir ('.download.' + [guid]::NewGuid().ToString('N') + '.exe')
+    try {
+        $probe = [IO.File]::Open($partial, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+        $probe.Dispose()
+    } catch {
+        throw '程序缓存目录不可写。请在可写的项目目录运行，或设置 BULBUL_CACHE_DIR；AI 工具中还需允许该目录的访问。'
+    }
     $checksumPath = "$partial.sha256"
     $base = "https://github.com/$repository/releases/download/v$version"
     [Console]::Error.WriteLine("Bulbul: preparing version $version for $target...")
@@ -78,11 +126,21 @@ function Get-BulbulBinary {
     }
 }
 
-if ($MyInvocation.InvocationName -ne '.') {
-    try { $binary = Get-BulbulBinary } catch {
+function Invoke-Bulbul {
+    param([string[]]$CliArgs)
+    try {
+        if ($CliArgs.Count -gt 0 -and $CliArgs[0] -eq 'list') {
+            return (Show-BulbulTools -Names @($CliArgs | Select-Object -Skip 1))
+        }
+        $binary = Get-BulbulBinary
+    } catch {
         [Console]::Error.WriteLine('Bulbul: ' + $_.Exception.Message)
-        exit 1
+        return 1
     }
-    & $binary @args
-    exit $LASTEXITCODE
+    & $binary @CliArgs | ForEach-Object { [Console]::Out.WriteLine($_) }
+    return $LASTEXITCODE
+}
+
+if ($MyInvocation.InvocationName -ne '.') {
+    exit (Invoke-Bulbul -CliArgs @($args))
 }

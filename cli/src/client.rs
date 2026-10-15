@@ -71,10 +71,14 @@ pub fn find_tool(name: &str) -> Result<(usize, &'static ToolSpec)> {
         .ok_or_else(|| ToolError::new("没有这个 Bulbul 工具，请运行 list 查看可用工具。"))
 }
 
-pub fn list_tools(name: Option<&str>) -> Result<Value> {
-    let tools: Vec<&ToolSpec> = match name {
-        Some(name) => vec![find_tool(name)?.1],
-        None => TOOLS.iter().collect(),
+pub fn list_tools(names: &[String]) -> Result<Value> {
+    let tools: Vec<&ToolSpec> = if names.is_empty() {
+        TOOLS.iter().collect()
+    } else {
+        names
+            .iter()
+            .map(|name| find_tool(name).map(|(_, tool)| tool))
+            .collect::<Result<_>>()?
     };
     Ok(Value::Array(tools.iter().map(|tool| json!({"name":tool.name, "description":tool.description, "input_schema":tool.input_schema})).collect()))
 }
@@ -113,10 +117,13 @@ impl BulbulClient {
         let (index, tool) = find_tool(name)?;
         if let Some(error) = VALIDATORS[index].iter_errors(&arguments).next() {
             // Validator descriptions include argument values; expose only the field.
-            return Err(ToolError::new(format!(
-                "参数 {} 不符合工具 schema，请运行 list 查看参数要求。",
-                error.instance_path()
-            )));
+            return Err(ToolError::coded(
+                "invalid_arguments",
+                format!(
+                    "参数 {} 不符合工具 schema，请运行 list 查看参数要求。",
+                    error.instance_path()
+                ),
+            ));
         }
         let mut values = Map::new();
         if let Some(properties) = tool.input_schema["properties"].as_object() {
@@ -160,15 +167,25 @@ impl BulbulClient {
                 json!({"status":"confirmation_required", "tool":name, "method":tool.method, "path":path, "query":query, "body":body}),
             );
         }
-        let token = self
-            .account
-            .token()?
-            .ok_or_else(|| ToolError::new("尚未登录 Bulbul，请运行 bulbul login 登录。"))?;
+        let token = self.account.token()?.ok_or_else(|| {
+            ToolError::coded(
+                "login_required",
+                "尚未登录 Bulbul，请运行 bulbul login 登录。",
+            )
+        })?;
         let method = Method::from_bytes(tool.method.as_bytes())
             .map_err(|_| ToolError::new("工具 HTTP 方法无效。"))?;
         let params = query
             .iter()
-            .map(|(key, value)| (key.clone(), scalar(value)))
+            .flat_map(|(key, value)| {
+                // OpenAPI query arrays use form/explode: one pair per item.
+                let items = value
+                    .as_array()
+                    .map_or_else(|| vec![value], |items| items.iter().collect());
+                items
+                    .into_iter()
+                    .map(move |item| (key.clone(), scalar(item)))
+            })
             .collect::<Vec<_>>();
         if let Some(file_key) = &tool.file_key {
             let local_path = values[file_key]

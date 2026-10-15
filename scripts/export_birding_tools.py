@@ -108,13 +108,22 @@ def main() -> int:
     args = parser.parse_args()
     try:
         contract = json.loads(args.openapi.read_text(encoding="utf-8"))
-        expected = json.dumps(build_tools(contract), ensure_ascii=False, indent=2) + "\n"
-        if args.check:
-            if not args.output.exists() or args.output.read_text(encoding="utf-8") != expected:
-                parser.error("Birding tools are stale; run this command without --check")
-        else:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(expected, encoding="utf-8", newline="\n")
+        tools = build_tools(contract)
+        outputs = {
+            args.output: json.dumps(tools, ensure_ascii=False, indent=2) + "\n",
+            args.output.with_suffix(".jsonl"): "".join(
+                json.dumps({key: tool[key] for key in ("name", "description", "input_schema")},
+                           ensure_ascii=False, separators=(",", ":")) + "\n"
+                for tool in tools
+            ),
+        }
+        for output, expected in outputs.items():
+            if args.check:
+                if not output.exists() or output.read_text(encoding="utf-8") != expected:
+                    parser.error("Birding tools are stale; run this command without --check")
+            else:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(expected, encoding="utf-8", newline="\n")
     except (OSError, ValueError, KeyError) as exc:
         parser.error(f"Cannot export birding tools: {exc}")
     print(f"Birding tools: {len(OPERATIONS)}")

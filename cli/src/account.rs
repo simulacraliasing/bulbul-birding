@@ -9,7 +9,22 @@ use tokio::{process::Command, sync::Mutex, time::Instant};
 use url::Url;
 
 pub const DEFAULT_API_URL: &str = "https://bulbulbirding.cn";
-const KEYRING_ERROR: &str = "系统凭据库不可用。Windows 使用凭据管理器，macOS 使用钥匙串，Linux 需要启用 Secret Service（支持提供该服务的 KWallet）。";
+#[cfg(windows)]
+const KEYRING_ERROR: &str = "当前进程无法使用 Windows 凭据管理器。请在自己的终端运行 bulbul doctor；若那里正常，检查 AI 工具的执行权限。";
+#[cfg(target_os = "macos")]
+const KEYRING_ERROR: &str = "当前进程无法使用 macOS 钥匙串。请在自己的终端运行 bulbul doctor，并检查钥匙串和 AI 工具的访问权限。";
+#[cfg(target_os = "linux")]
+const KEYRING_ERROR: &str = "当前进程无法使用系统凭据库。请在自己的终端运行 bulbul doctor，检查 Secret Service 是否启用、解锁，以及 AI 工具的访问权限。KWallet 需要提供 Secret Service 接口。";
+
+fn credential_error(error: keyring::Error) -> ToolError {
+    match error {
+        keyring::Error::NoStorageAccess(_) => ToolError::coded(
+            "credential_access_denied",
+            "当前进程无法访问系统凭据库，可能受执行权限、锁定状态或登录会话限制。请在自己的终端运行 bulbul doctor；若那里正常，检查 AI 工具的执行权限。不要把令牌复制到聊天。",
+        ),
+        _ => ToolError::coded("credential_store_unavailable", KEYRING_ERROR),
+    }
+}
 
 #[derive(Default)]
 pub struct Environment {
@@ -66,19 +81,24 @@ impl OsCredentialStore {
 
     fn entry(api_url: &str) -> Result<keyring::Entry> {
         let username = format!("{:x}", Sha256::digest(api_url.as_bytes()));
-        keyring::Entry::new("bulbul-birding", &username).map_err(|_| ToolError::new(KEYRING_ERROR))
+        keyring::Entry::new("bulbul-birding", &username).map_err(credential_error)
     }
 }
 
 impl CredentialStore for OsCredentialStore {
     fn api_url(&self) -> Result<Option<String>> {
-        if !self.path.exists() {
-            return Ok(None);
-        }
-        let error =
-            || ToolError::new("无法读取 Bulbul 本机设置，请重新运行 login --api-url 指定站点。");
-        let value: Value = serde_json::from_slice(&std::fs::read(&self.path).map_err(|_| error())?)
-            .map_err(|_| error())?;
+        let error = || {
+            ToolError::coded(
+                "local_settings_unavailable",
+                "无法读取 Bulbul 本机设置，请检查当前进程的目录访问权限，或运行 login --api-url 指定站点。",
+            )
+        };
+        let bytes = match std::fs::read(&self.path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err(error()),
+        };
+        let value: Value = serde_json::from_slice(&bytes).map_err(|_| error())?;
         let api = value
             .get("api_url")
             .and_then(Value::as_str)
@@ -103,7 +123,7 @@ impl CredentialStore for OsCredentialStore {
                 Ok(Some(session))
             }
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(ToolError::new(KEYRING_ERROR)),
+            Err(error) => Err(credential_error(error)),
         }
     }
 
@@ -123,15 +143,13 @@ impl CredentialStore for OsCredentialStore {
         std::fs::rename(&temporary, &self.path).map_err(|_| error())?;
         Self::entry(api_url)?
             .set_password(&serde_json::to_string(session).map_err(|_| error())?)
-            .map_err(|_| error())
+            .map_err(credential_error)
     }
 
     fn clear(&self, api_url: &str) -> Result<()> {
         match Self::entry(api_url)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(ToolError::new(
-                "无法删除本机保存的 Bulbul 登录，请检查系统凭据库。",
-            )),
+            Err(error) => Err(credential_error(error)),
         }
     }
 }
@@ -184,10 +202,7 @@ pub async fn http_json(
 }
 
 pub async fn read_json_response(request: reqwest::RequestBuilder) -> Result<Value> {
-    let response = request
-        .send()
-        .await
-        .map_err(|_| ToolError::new("暂时无法连接 Bulbul，请检查网络后重试。"))?;
+    let response = request.send().await.map_err(network_error)?;
     decode_json_response(response).await
 }
 
@@ -199,10 +214,7 @@ where
     let started = std::time::Instant::now();
     let mut retries = 0;
     loop {
-        let response = make_request()?
-            .send()
-            .await
-            .map_err(|_| ToolError::new("暂时无法连接 Bulbul，没有自动重新上传文件。"))?;
+        let response = make_request()?.send().await.map_err(network_error)?;
         let delay = if response.status() == StatusCode::TOO_MANY_REQUESTS
             && response
                 .headers()
@@ -238,10 +250,80 @@ where
     }
 }
 
+fn network_error(error: reqwest::Error) -> ToolError {
+    if error.is_timeout() {
+        ToolError::coded(
+            "request_timeout",
+            "请求超时，无法确定服务端是否已完成。本次操作没有自动重试；上传或写入前请先检查结果。",
+        )
+    } else {
+        ToolError::coded(
+            "network_unavailable",
+            "暂时无法连接 Bulbul，请检查网络。本次操作没有自动重试；上传或写入前请先检查结果。",
+        )
+    }
+}
+
+// Only contract field names, bounded indexes and known validation types are public.
+// Do not echo input, msg, ctx, raw server content or arbitrary field names.
+fn validation_fields(value: &Value) -> Vec<Value> {
+    value["detail"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(20)
+        .map(|error| {
+            let field: Vec<Value> = error["loc"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(8)
+                .map(|part| {
+                    if let Some(index) = part.as_u64() {
+                        return json!(index.min(1_000_000));
+                    }
+                    let name = part.as_str().unwrap_or("");
+                    if matches!(name, "query" | "body" | "path" | "header" | "cookie")
+                        || crate::client::TOOLS
+                            .iter()
+                            .any(|tool| tool.input_schema["properties"].get(name).is_some())
+                    {
+                        json!(name)
+                    } else {
+                        json!("field")
+                    }
+                })
+                .collect();
+            let kind = match error["type"].as_str().unwrap_or("") {
+                "missing" => "required",
+                "int_parsing" | "int_type" | "int_from_float" => "integer",
+                "float_parsing" | "float_type" | "finite_number" => "number",
+                "bool_parsing" | "bool_type" => "boolean",
+                "string_type" => "string",
+                "list_type" => "array",
+                "date_parsing" | "date_type" | "date_from_datetime_parsing" => "date",
+                "greater_than"
+                | "greater_than_equal"
+                | "less_than"
+                | "less_than_equal"
+                | "too_short"
+                | "too_long"
+                | "string_too_short"
+                | "string_too_long"
+                | "string_pattern_mismatch" => "constraint",
+                _ => "validation_error",
+            };
+            json!({"field":field, "type":kind})
+        })
+        .collect()
+}
+
 async fn decode_json_response(mut response: reqwest::Response) -> Result<Value> {
-    match response.status() {
+    let status = response.status();
+    match status {
         StatusCode::UNAUTHORIZED => {
-            return Err(ToolError::new(
+            return Err(ToolError::coded(
+                "session_expired",
                 "Bulbul 登录已过期，请重新运行 bulbul login 登录。",
             ));
         }
@@ -251,17 +333,42 @@ async fn decode_json_response(mut response: reqwest::Response) -> Result<Value> 
                 .get("retry-after")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse::<u64>().ok());
-            return Err(ToolError::new(seconds.map_or_else(
-                || "请求较频繁或服务繁忙，请稍后重试。".to_owned(),
-                |seconds| format!("请求较频繁或服务繁忙，请等待 {seconds} 秒后重试。"),
-            )));
+            return Err(ToolError::coded(
+                "service_busy",
+                seconds.map_or_else(
+                    || "请求较频繁或服务繁忙，请稍后重试。".to_owned(),
+                    |seconds| format!("请求较频繁或服务繁忙，请等待 {seconds} 秒后重试。"),
+                ),
+            )
+            .with_details(json!({"http_status":429, "retry_after_seconds":seconds})));
+        }
+        StatusCode::UNPROCESSABLE_ENTITY => {
+            let mut bytes = Vec::new();
+            while let Ok(Some(chunk)) = response.chunk().await {
+                if bytes.len() + chunk.len() > 64 * 1024 {
+                    break;
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let fields = serde_json::from_slice::<Value>(&bytes)
+                .map_or_else(|_| Vec::new(), |value| validation_fields(&value));
+            return Err(ToolError::coded("invalid_arguments", "服务返回 HTTP 422，参数不符合接口要求。请查看 details.validation，并用 list 核对参数；没有自动重试。")
+                .with_details(json!({"http_status":422, "validation":fields})));
+        }
+        StatusCode::PAYLOAD_TOO_LARGE => {
+            return Err(ToolError::coded(
+                "upload_too_large",
+                "文件超过服务的上传大小限制，请缩小文件后再上传。",
+            )
+            .with_details(json!({"http_status":413})));
         }
         StatusCode::NO_CONTENT => return Ok(json!({})),
         status if !status.is_success() => {
-            return Err(ToolError::new(format!(
-                "服务返回 HTTP {}，没有自动重试本次操作。",
-                status.as_u16()
-            )));
+            return Err(ToolError::coded(
+                "http_error",
+                format!("服务返回 HTTP {}，没有自动重试本次操作。", status.as_u16()),
+            )
+            .with_details(json!({"http_status":status.as_u16()})));
         }
         _ => {}
     }
@@ -320,6 +427,33 @@ impl Account {
             return Ok(Some(token.clone()));
         }
         Ok(self.store.read(&self.api_url)?.map(|s| s.session_token))
+    }
+
+    pub fn doctor(&self) -> Value {
+        let (state, present, issue) = if self.token_override.is_some() {
+            ("not_checked", Some(true), None)
+        } else {
+            match self.store.read(&self.api_url) {
+                Ok(session) => ("accessible", Some(session.is_some()), None),
+                Err(error) => (
+                    if error.code == "credential_access_denied" {
+                        "access_denied"
+                    } else {
+                        "unavailable"
+                    },
+                    None,
+                    Some(error.as_json()),
+                ),
+            }
+        };
+        json!({
+            "status":if issue.is_some() {"attention_required"} else {"ok"},
+            "version":env!("CARGO_PKG_VERSION"), "api_url":self.api_url,
+            "credential_store":state,
+            "session_source":if self.token_override.is_some() {"environment"} else {"system_credentials"},
+            "session_present":present, "server_session":"not_checked", "issue":issue,
+            "message":"仅检查本机，没有请求服务端或改变登录。本机有会话不表示服务端仍有效；用 status 验证账号。"
+        })
     }
 
     async fn request(

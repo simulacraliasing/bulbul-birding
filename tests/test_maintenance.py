@@ -86,6 +86,8 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         tools = {tool["name"]: tool for tool in json.loads(output.read_text(encoding="utf-8"))}
         self.assertEqual(len(tools), 23)
+        discovery = [json.loads(line) for line in output.with_suffix(".jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(discovery, [{key: tool[key] for key in ("name", "description", "input_schema")} for tool in tools.values()])
         self.assertEqual(tools["identify_audio"]["max_file_bytes"], 50 * 1024 * 1024)
         self.assertEqual(tools["identify_audio"]["input_schema"]["properties"]["file"]["type"], "string")
         self.assertNotIn("geographic_calibration", tools["identify_photo"]["input_schema"]["properties"])
@@ -102,6 +104,11 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(tools["location_search"]["query_keys"], ["query", "limit"])
         self.assertEqual(self.run_script(script, "--openapi", source, "--output", output, "--check").returncode, 0)
         original = output.read_bytes()
+        lines = output.with_suffix(".jsonl")
+        original_lines = lines.read_bytes()
+        lines.write_text("{}\n", encoding="utf-8")
+        self.assertEqual(self.run_script(script, "--openapi", source, "--output", output, "--check").returncode, 2)
+        lines.write_bytes(original_lines)
         output.write_text("[]\n", encoding="utf-8")
         self.assertEqual(self.run_script(script, "--openapi", source, "--output", output, "--check").returncode, 2)
         output.write_bytes(original)
@@ -109,6 +116,11 @@ class MaintenanceTests(unittest.TestCase):
         source.write_text(json.dumps(contract), encoding="utf-8")
         self.assertEqual(self.run_script(script, "--openapi", source, "--output", output).returncode, 2)
         self.assertEqual(output.read_bytes(), original)
+
+    def test_shipped_discovery_matches_native_tool_contract(self):
+        tools = json.loads((ROOT / "assets/tools.json").read_text(encoding="utf-8"))
+        discovery = [json.loads(line) for line in (ROOT / "assets/tools.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(discovery, [{key: tool[key] for key in ("name", "description", "input_schema")} for tool in tools])
 
 
 if __name__ == "__main__":
