@@ -73,6 +73,12 @@ class MaintenanceTests(unittest.TestCase):
                     "file": {"type": "string", "format": "binary"}, "geographic_calibration": {"type": "string"},
                 }, "required": ["file"]}}}},
             }
+        contract["paths"]["/api/v1/locations/search"]["get"] = {
+            "parameters": [
+                {"in": "query", "name": "query", "required": True, "schema": {"type": "string", "minLength": 1}},
+                {"in": "query", "name": "limit", "schema": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}},
+            ],
+        }
         source, output = self.root / "contract.json", self.root / "tools.json"
         source.write_text(json.dumps(contract), encoding="utf-8")
         script = ROOT / "scripts/export_birding_tools.py"
@@ -91,6 +97,9 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(tool["input_schema"]["properties"]["confirm"]["default"], False)
         self.assertEqual(tools["species_predict"]["input_schema"]["properties"]["limit"]["maximum"], 100)
         self.assertEqual(tools["location_search"]["input_schema"]["required"], ["query"])
+        self.assertEqual(tools["location_search"]["method"], "GET")
+        self.assertEqual(tools["location_search"]["path"], "/locations/search")
+        self.assertEqual(tools["location_search"]["query_keys"], ["query", "limit"])
         self.assertEqual(self.run_script(script, "--openapi", source, "--output", output, "--check").returncode, 0)
         original = output.read_bytes()
         output.write_text("[]\n", encoding="utf-8")

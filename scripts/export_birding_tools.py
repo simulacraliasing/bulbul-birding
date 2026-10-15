@@ -32,6 +32,7 @@ OPERATIONS = [
     ("species_list_from_saved_query", "POST", "/me/species-lists/from-saved-query", "从最近查询保存清单；取得用户授权后传 confirm=true", True, None),
     ("species_list_from_taxonomy", "POST", "/me/species-lists/from-taxonomy", "从分类范围保存清单；取得用户授权后传 confirm=true", True, None),
     ("species_list_replace_items", "PUT", "/me/species-lists/{list_id}/items", "替换清单全部鸟种；取得用户授权后传 confirm=true", True, None),
+    ("location_search", "GET", "/locations/search", "搜索地点候选，无需配置地图 Key；同名或多候选时请用户选择，再使用返回的坐标", False, None),
 ]
 
 
@@ -96,14 +97,6 @@ def build_tools(contract: dict) -> list[dict]:
             "result_limit": result_limit,
             "input_schema": {"type": "object", "properties": properties, "required": required, "additionalProperties": False},
         })
-    tools.append({
-        "name": "location_search", "description": "用天地图搜索地点候选；同名或多候选时请用户选择，再使用返回的坐标",
-        "mutation": False,
-        "input_schema": {"type": "object", "properties": {
-            "query": {"type": "string", "minLength": 1, "maxLength": 200},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
-        }, "required": ["query"], "additionalProperties": False},
-    })
     return tools
 
 
@@ -124,7 +117,7 @@ def main() -> int:
             args.output.write_text(expected, encoding="utf-8", newline="\n")
     except (OSError, ValueError, KeyError) as exc:
         parser.error(f"Cannot export birding tools: {exc}")
-    print(f"Birding tools: {len(OPERATIONS) + 1}")
+    print(f"Birding tools: {len(OPERATIONS)}")
     return 0
 
 

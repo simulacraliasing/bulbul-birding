@@ -15,7 +15,6 @@ const KEYRING_ERROR: &str = "系统凭据库不可用。Windows 使用凭据管�
 pub struct Environment {
     pub api_url: Option<String>,
     pub session_token: Option<String>,
-    pub tianditu_key: Option<String>,
 }
 
 impl Environment {
@@ -29,7 +28,6 @@ impl Environment {
         Self {
             api_url: value("BULBUL_API_URL"),
             session_token: value("BULBUL_SESSION_TOKEN"),
-            tianditu_key: value("BULBUL_TIANDITU_KEY"),
         }
     }
 }
