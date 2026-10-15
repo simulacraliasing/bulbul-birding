@@ -56,7 +56,7 @@ bulbul call identify_audio --arguments-file /absolute/path/audio.json
 
 照片最多 20 MB；声音完整文件最多 50 MB、0.5–300 秒，选区不能绕过完整文件的时长限制。可以传入 `start_seconds`、`end_seconds` 只分析选区。完整地点和日期用于 Geomodel，缺少这些信息时使用提供的地区或显示未校准。结果包括原始分数、校准排序、分布异常提示和声音时间片段。支持格式与具体参数见工具 schema 和 [SKILL.md](SKILL.md)。
 
-这两个工具需要支持云端识别的服务端和对应新版本 CLI；旧版 v0.39.0 程序尚不包含它们。准备发布前可以从源码构建验证。
+照片和鸟声识别从 CLI v0.40.0 开始提供，需要连接支持云端识别的 Bulbul 服务端。更新 skill 后，启动脚本会自动下载并校验对应版本的程序。
 
 请求繁忙时先进入短队列，队列已满或等待超时会提示稍后重试。CLI 仅对明确未受理的 429 按 Retry-After 最多重试 2 次，重试前累计自动等待最多 20 秒；超时或网络失败不会自动重新上传。超过 5 分钟的录音先截取或拆分文件，普通用户无需配置队列或模型参数。
 
@@ -80,7 +80,7 @@ uv venv .venv
 .venv/bin/python scripts/manage_version.py check
 .venv/bin/python scripts/manage_version.py sync
 # 准备客户端发版时才更新版本
-.venv/bin/python scripts/manage_version.py set 0.39.0
+.venv/bin/python scripts/manage_version.py set 0.40.0
 .venv/bin/python tests/test_maintenance.py
 ```
 

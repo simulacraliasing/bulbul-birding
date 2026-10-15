@@ -326,7 +326,7 @@ checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
 
 [[package]]
 name = "bulbul-birding"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "clap",
  "directories",
