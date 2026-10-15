@@ -10,7 +10,7 @@ use std::{
 };
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{body_json, header, method, path},
+    matchers::{body_json, header, method, path, query_param},
 };
 
 fn test_directory() -> std::path::PathBuf {
@@ -115,6 +115,7 @@ async fn schemas_reject_invalid_arguments_before_http() {
     let client = with_token(&server);
     for (tool, arguments) in [
         ("not-a-tool", json!({})),
+        ("location_search", json!({"query":"   "})),
         ("species_wiki", json!({"species_code":"private-input"})),
         ("hotspots_nearby", json!({"lat":100,"lon":120})),
         (
@@ -494,49 +495,55 @@ async fn logout_preserves_credentials_on_failure_and_only_clears_current_site() 
 }
 
 #[tokio::test]
-async fn geocoder_never_receives_bulbul_credentials_and_discards_invalid_coordinates() {
+async fn location_search_uses_saved_login_and_needs_no_map_key() {
     let server = MockServer::start().await;
-    let geocoder = MockServer::start().await;
-    Mock::given(path("/search")).respond_with(ResponseTemplate::new(200).set_body_json(json!({"status":{"infocode":1000},"pois":[{"name":"翠湖","lonlat":"102.704,25.048","address":"昆明"},{"name":"invalid","lonlat":"nan,1"}]}))).expect(1).mount(&geocoder).await;
-    let http = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
+    let store = Arc::new(MemoryStore::default());
+    store
+        .save(
+            &normalize_api_url(&server.uri()).unwrap(),
+            &Session {
+                session_token: "saved-private-token".into(),
+                expires_at: None,
+            },
+        )
         .unwrap();
-    let client = BulbulClient::with_http(
-        http,
-        Arc::new(MemoryStore::default()),
-        Environment {
-            session_token: Some("private-test-token".into()),
-            tianditu_key: Some("private-map-key".into()),
-            ..Default::default()
-        },
-        Some(&server.uri()),
-        &format!("{}/search", geocoder.uri()),
-    )
-    .unwrap();
-    let result = client
+    Mock::given(method("GET"))
+        .and(path("/api/v1/locations/search"))
+        .and(query_param("query", "翠湖"))
+        .and(query_param("limit", "5"))
+        .and(header("authorization", "Bearer saved-private-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "source":"tianditu", "query":"翠湖",
+            "candidates":[{"name":"翠湖", "lon":102.704, "lat":25.048, "address":"昆明"}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let result = client(&server, store)
         .call("location_search", json!({"query":"翠湖"}))
         .await
         .unwrap();
-    assert_eq!(
-        result["candidates"],
-        json!([{"name":"翠湖","lon":102.704,"lat":25.048,"address":"昆明"}])
-    );
-    let requests = geocoder.received_requests().await.unwrap();
-    assert!(!requests[0].headers.contains_key("authorization"));
-    assert!(!result.to_string().contains("private-map-key"));
-    assert!(server.received_requests().await.unwrap().is_empty());
+    assert_eq!(result["candidates"][0]["name"], "翠湖");
+    assert_eq!(result["candidates"][0]["lon"], 102.704);
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    let keys = requests[0]
+        .url
+        .query_pairs()
+        .map(|(key, _)| key.into_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(keys.len(), 2);
+    assert!(!keys.iter().any(|key| key == "tk" || key == "postStr"));
 }
 
 #[tokio::test]
-async fn no_geocoder_key_sends_no_request() {
+async fn location_search_requires_login_before_sending_a_request() {
     let server = MockServer::start().await;
-    assert!(
-        with_token(&server)
-            .call("location_search", json!({"query":"翠湖"}))
-            .await
-            .is_err()
-    );
+    let error = client(&server, Arc::new(MemoryStore::default()))
+        .call("location_search", json!({"query":"翠湖"}))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("bulbul login"));
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 

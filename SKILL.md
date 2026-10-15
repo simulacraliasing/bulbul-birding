@@ -24,7 +24,7 @@ bash <skill绝对路径>/scripts/bulbul.sh call species_predict --arguments-file
 
 ## 整理观鸟建议
 
-- 用户只给地名时，先用 `location_search` 查询候选。它使用天地图，需要 `BULBUL_TIANDITU_KEY`。地点重名或有多个合理候选时，请用户选择；没有地理编码配置时请用户提供坐标，不猜经纬度。天地图默认搜索范围为中国大陆，境外地点使用用户提供或其他可用工具查到的坐标。
+- 用户只给地名时，登录后直接用 `location_search` 查询候选，无需申请或配置地图 API Key。地点重名或有多个合理候选时，请用户选择；服务暂时不可用时，可使用用户提供或其他可用工具查到的坐标，不猜经纬度。天地图默认搜索范围为中国大陆，境外地点使用用户提供或其他可用工具查到的坐标。
 - 根据用户日期传入 `target_date`，格式为 `YYYY-MM-DD`；“明天”等相对日期按用户时区解释。
 - 用 `species_catalog` 把名称对齐到项目内 `taxon_id`，后续鸟种查询和清单关联都使用这个 ID。学名、中文名和外部代码用于展示或查找。
 - 地点预习用 `species_predict`，附近地点用 `hotspots_nearby`，按目标鸟种寻找目的地用 `hotspots_target_destinations`。预测会像网页一样保存当前用户的最近查询。

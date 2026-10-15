@@ -81,8 +81,6 @@ pub fn list_tools(name: Option<&str>) -> Result<Value> {
 
 pub struct BulbulClient {
     pub account: Account,
-    tianditu_key: Option<String>,
-    geocoder_url: String,
 }
 
 impl BulbulClient {
@@ -107,28 +105,8 @@ impl BulbulClient {
             .user_agent(concat!("bulbul-birding/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|_| ToolError::new("无法启动 Bulbul HTTP 客户端。"))?;
-        Self::with_http(
-            http,
-            store,
-            env,
-            api_override,
-            "https://api.tianditu.gov.cn/v2/search",
-        )
-    }
-
-    pub fn with_http(
-        http: Client,
-        store: Arc<dyn CredentialStore>,
-        env: Environment,
-        api_override: Option<&str>,
-        geocoder_url: &str,
-    ) -> Result<Self> {
         let account = Account::new(http, store, &env, api_override)?;
-        Ok(Self {
-            account,
-            tianditu_key: env.tianditu_key,
-            geocoder_url: geocoder_url.to_owned(),
-        })
+        Ok(Self { account })
     }
 
     pub async fn call(&self, name: &str, arguments: Value) -> Result<Value> {
@@ -154,9 +132,6 @@ impl BulbulClient {
                 .ok_or_else(|| ToolError::new("参数必须是 JSON object。"))?
                 .clone(),
         );
-        if name == "location_search" {
-            return self.search_locations(&values).await;
-        }
         let mut path = tool.path.clone();
         for key in &tool.path_keys {
             let value = scalar(&values[key]);
@@ -244,62 +219,6 @@ impl BulbulClient {
             tool.result_limit.as_deref(),
             values.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize,
         ))
-    }
-
-    async fn search_locations(&self, values: &Map<String, Value>) -> Result<Value> {
-        let key = self.tianditu_key.as_ref().ok_or_else(|| {
-            ToolError::new("地点搜索需要 BULBUL_TIANDITU_KEY，也可以请用户提供坐标。")
-        })?;
-        let query = values["query"].as_str().unwrap_or_default().trim();
-        if query.is_empty() {
-            return Err(ToolError::new("地点名称不能为空。"));
-        }
-        let limit = values.get("limit").and_then(Value::as_u64).unwrap_or(5) as usize;
-        let post = json!({"keyWord":query,"level":"15","mapBound":"73.0,18.0,135.0,53.0","queryType":"1","count":limit.to_string()});
-        let result = http_json(
-            &self.account.http,
-            Method::GET,
-            &self.geocoder_url,
-            None,
-            None,
-            &[
-                ("postStr".into(), post.to_string()),
-                ("type".into(), "search".into()),
-                ("tk".into(), key.clone()),
-            ],
-        )
-        .await?;
-        if !result.is_object()
-            || result.get("status").is_some_and(|status| {
-                !status.is_object()
-                    || status
-                        .get("infocode")
-                        .is_some_and(|code| scalar(code) != "1000")
-            })
-        {
-            return Err(ToolError::new(
-                "地点搜索服务返回无效结果，请检查天地图配置。",
-            ));
-        }
-        let mut rows = Vec::new();
-        if let Some(area) = result.get("area").filter(|v| v.is_object()) {
-            rows.push(area);
-        }
-        if let Some(pois) = result.get("pois") {
-            rows.extend(
-                pois.as_array()
-                    .ok_or_else(|| ToolError::new("地点搜索服务返回无效候选。"))?,
-            );
-        }
-        let candidates = rows.into_iter().filter_map(|row| {
-            let name = row.get("name")?.as_str().filter(|s| !s.is_empty())?;
-            let (lon,lat) = row.get("lonlat")?.as_str()?.split_once(',')?;
-            let lon: f64 = lon.parse().ok()?;
-            let lat: f64 = lat.parse().ok()?;
-            if !lon.is_finite() || !lat.is_finite() || !(-180.0..=180.0).contains(&lon) || !(-90.0..=90.0).contains(&lat) { return None; }
-            Some(json!({"name":name,"lon":lon,"lat":lat,"address":row.get("address").cloned().unwrap_or(json!(""))}))
-        }).take(limit).collect::<Vec<_>>();
-        Ok(json!({"source":"tianditu","query":query,"candidates":candidates}))
     }
 }
 

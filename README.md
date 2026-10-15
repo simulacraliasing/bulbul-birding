@@ -39,6 +39,10 @@ npx skills add simulacraliasing/bulbul-skills --skill bulbul-birding -g
 
 完整的登录、更新和使用方式见 [接入说明](references/setup.md)，具体使用规则见 [SKILL.md](SKILL.md)。下载失败时可以查看 [Releases](https://github.com/simulacraliasing/bulbul-skills/releases)。
 
+## 按地名找地点
+
+登录后直接使用 `location_search` 搜索候选地点，无需申请或配置地图 API Key。同名地点可从返回的名称、地址和坐标中选择，默认搜索范围为中国大陆。
+
 ## 照片和鸟声识别
 
 登录后使用 `identify_photo` 或 `identify_audio`，文件上传到 Bulbul 云端完成识别和地点日期校准。普通用户无需下载模型或配置新环境变量。应用继续使用现有本地推理。

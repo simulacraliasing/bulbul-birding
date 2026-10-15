@@ -73,13 +73,22 @@ bulbul call species_catalog --arguments-file /absolute/path/arguments.json
 
 声音支持 WAV、FLAC、MP3、M4A（AAC/ALAC）、AIFF 和 Ogg Vorbis；Opus 需先转成 WAV。照片限制 20 MB，声音完整文件限制 50 MB、0.5–300 秒。选区不能绕过时长上限，超过 5 分钟时先截取或拆分文件。CLI 仅对明确未受理的 429 按 Retry-After 最多重试 2 次，重试前累计自动等待最多 20 秒；超时或网络错误不重新上传。
 
+## 按地名搜索
+
+登录后可以直接使用 `location_search`，无需申请天地图账号或设置地图 API Key。先运行 `bulbul list location_search` 查看参数，参数文件示例：
+
+```json
+{"query":"昆明翠湖","limit":5}
+```
+
+地点搜索通过 Bulbul 服务端完成，返回候选名称、地址和经纬度。同名地点需要确认后再使用坐标，默认搜索范围为中国大陆。服务繁忙时按提示稍后再试，或使用已知坐标。
+
 ## 可选配置
 
 | 变量                   | 用途                                                                        |
 | ---------------------- | --------------------------------------------------------------------------- |
 | `BULBUL_API_URL`       | 覆盖记住的站点地址；远程站点需要 HTTPS。也可在 `login` 时使用 `--api-url`。 |
 | `BULBUL_SESSION_TOKEN` | 使用已有普通用户会话，优先于系统中保存的登录；浏览器登录前先移除。          |
-| `BULBUL_TIANDITU_KEY`  | 天地图地点搜索 key；未配置时仍可用已知坐标查询。                            |
 
 这些变量需要由运行 CLI 的进程提供。Agent 调用 CLI 时会使用终端的环境变量，普通用户无需配置账号变量；不要把令牌写进共享配置、参数、聊天或 Git。
 

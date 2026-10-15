@@ -1939,21 +1939,36 @@
   },
   {
     "name": "location_search",
-    "description": "用天地图搜索地点候选；同名或多候选时请用户选择，再使用返回的坐标",
+    "description": "搜索地点候选，无需配置地图 Key；同名或多候选时请用户选择，再使用返回的坐标",
+    "method": "GET",
+    "path": "/locations/search",
     "mutation": false,
+    "path_keys": [],
+    "query_keys": [
+      "query",
+      "limit"
+    ],
+    "body_keys": [],
+    "has_body": false,
+    "result_limit": null,
     "input_schema": {
       "type": "object",
       "properties": {
         "query": {
-          "type": "string",
+          "description": "地点名称",
+          "maxLength": 200,
           "minLength": 1,
-          "maxLength": 200
+          "pattern": "\\S",
+          "title": "Query",
+          "type": "string"
         },
         "limit": {
-          "type": "integer",
-          "minimum": 1,
+          "default": 5,
+          "description": "最多返回的候选地点数量",
           "maximum": 10,
-          "default": 5
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
         }
       },
       "required": [
